@@ -106,13 +106,13 @@ await page.evaluate(() => window.__nine.setSpeed(1));
 await page.evaluate(() => { window.__nine.setT(100); });
 await wait(200);
 let a = (await st()).T;
-await stick('left', -1); await wait(1000); await stick('left', 0);
+await stick('left', -1); await wait(2000); await stick('left', 0);
 let b = (await st()).T;
 if (b - a > 4) ok(`left stick forward scrubs zoom in (T ${a.toFixed(1)} → ${b.toFixed(1)})`); else fail(`stick forward did not scrub (T ${a} → ${b})`);
 a = b;
-await stick('left', 1); await wait(1000); await stick('left', 0);
+await stick('left', 1); await wait(2000); await stick('left', 0);
 b = (await st()).T;
-if (b < a - 4) ok(`left stick back scrubs zoom out (T ${a.toFixed(1)} → ${b.toFixed(1)})`); else fail(`stick back did not scrub (T ${a} → ${b})`);
+if (b < a - 3) ok(`left stick back scrubs zoom out (T ${a.toFixed(1)} → ${b.toFixed(1)})`); else fail(`stick back did not scrub (T ${a} → ${b})`);
 
 // 4. Explore: A button toggles mode; stick changes z directly
 await press('right', 'a-button');

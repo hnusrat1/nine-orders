@@ -65,6 +65,7 @@ python3 sim/check_physics.py # recompute every on-screen number from the data fi
 
 ```
 cd tests && npm install
+./run-all.sh           # all three below; required before every push
 node run-desktop.mjs   # Playwright, headless Chromium: all stages, screenshots in tests/screenshots/, fails on console errors or >150 draw calls
 node run-xr.mjs        # Meta IWER (Quest 3 emulation): Enter VR, trigger selects the photon, Guided end to end, stick scrub, Explore toggle, trigger labels, grip rotate; logs frame times
 python3 ../sim/check_physics.py
