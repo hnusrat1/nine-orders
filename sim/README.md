@@ -29,7 +29,7 @@ sim/regenerate.sh            # inputs → simulations → assets/data → models
 sim/regenerate.sh --no-art   # skip the Blender models
 ```
 
-About 15 minutes on 4 cores, most of it the Cycles light bake for the room. All runs use fixed seeds.
+About 6 minutes on 4 cores, about half of it the Cycles light bake for the room. All runs use fixed seeds.
 
 | Step | Script | What it does |
 |---|---|---|

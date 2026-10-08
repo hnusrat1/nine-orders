@@ -4,7 +4,7 @@
 /run/numberOfThreads 4
 /nine/physics opt2
 /nine/out work/runs/dna_primary_cal
-/nine/energy 916.3166 keV
+/nine/energy 890.2533 keV
 /nine/start 0 0 -20000 nm
 /nine/dir 0 0 1
 /nine/half 8 8 20 um

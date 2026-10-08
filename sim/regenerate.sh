@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Regenerate every data file and model the app uses, from raw inputs.
 #
-#   sim/regenerate.sh            # everything (≈15 min on 4 CPU cores)
+#   sim/regenerate.sh            # everything (about 6 min on 4 CPU cores)
 #   sim/regenerate.sh --no-art   # simulations and data only
 #
 # Needs: the Geant4 conda environment (G4_PREFIX, default /opt/g4) and a Python
@@ -12,7 +12,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 PY=${PY:-/opt/py311/bin/python}
 ART=1
-[ "${1:-}" = "--no-art" ] && ART=0
+if [ "${1:-}" = "--no-art" ]; then ART=0; fi
 . ./env.sh
 
 step() { printf '\n== %s\n' "$*"; }

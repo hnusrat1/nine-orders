@@ -72,6 +72,9 @@ def recompute(ix, S):
     out["dsbSeparation"] = (abs(a["bp"] - b["bp"]), "|bp(strand A break) − bp(strand B break)|", None)
     for s in (a, b):
         out["ssbA_eV" if s["strand"] == 0 else "ssbB_eV"] = (s["edep_eV"], "edep_eV of the break in index.dsb.ssb", None)
+    out["photonTime"] = (float(np.linalg.norm(np.array(ix["geometry"]["source_mm"]))) / 299.792458, "|source − interaction point| / c (straight flight; Rayleigh scatters could add a little)", 0.005)
+    out["electronTime"] = (float(pe["time"][prim].max() - pe["time"][prim].min()) * 1000, "time span of track 0 in patientElectron.bin (ns → ps)", None)
+    out["deltaTime"] = (float(d["time"].max() - d["time"].min()) * 1e6, "time span of all records in delta.bin (ns → fs)", None)
     out["nucleusDiameter"] = (2 * ix["handoff"]["cell"]["nucleusRadius_um"], "2 × handoff.cell.nucleusRadius_um (model cell geometry)", None)
     R = ix.get("runs", {})
     if "primarySegments" in R:

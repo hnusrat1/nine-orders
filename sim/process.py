@@ -211,6 +211,9 @@ def main():
         "deltaE": num(st["delta_E_keV"], "keV", "Delta electron energy", "Kinetic energy of the secondary electron when created (Geant4, patient run)", 3),
         "deltaRange": num(delta_path, "nm", "Delta electron path length", "Sum of the delta electron's step lengths in the chosen Geant4-DNA (option4) history", 2),
         "deltaIons": num(delta_ions, "", "Ionisations by the delta electron and its secondaries", "Count of ionisation events in the chosen history", 3),
+        "photonTime": num(t_int, "ns", "Photon flight time from the target to the interaction", "Geant4 global time at the Compton interaction", 2),
+        "electronTime": num(float(max(s["t_ns"] for s in prim_steps) - T[2]["t_ns"]) * 1000, "ps", "Recoil electron slowing-down time", "Global time of the electron's last step minus its start (Geant4)", 2),
+        "deltaTime": num(float(dr["t"].max() - dr["t"].min()) * 1e6, "fs", "Duration of the delta electron's track", "Time span of all records in the chosen Geant4-DNA history", 2),
         "nucleusDiameter": num(NUCLEUS_D_UM, "µm", "Nucleus diameter", "Model value for a tumour cell nucleus (illustrative)", 2),
         "nrl": num(nrl, "bp", "Nucleosome repeat length (model)", "147 bp per nucleosome plus the mean linker length of the chromatin model (30–50 bp)", 3),
         "dsbSeparation": num(sep, "bp", "Separation of the two strand breaks", "Base-pair distance between the strand A and strand B breaks", 2),
@@ -285,7 +288,7 @@ def notes(n, dsb, runs, flu, segs):
     return [
         {"h": "What you are seeing", "p": [
             "One photon from a 6 MV beam, followed from the treatment head to a break in DNA. Each scale is its own simulation, and the hand-offs between them carry the particle's type, energy and direction.",
-            "Time is slowed by a different factor at each scale: the photon crosses the room in about 3 ns, the recoil electron stops within picoseconds, and the delta electron's whole track takes tens of femtoseconds."]},
+            f"Time is slowed by a different factor at each scale: the photon reaches the interaction {f('photonTime', 2)} after leaving the target, the recoil electron stops {f('electronTime', 2)} later, and the delta electron's whole track takes {f('deltaTime', 2)}."]},
         {"h": "How the scales are stitched", "p": [
             f"Patient: Geant4 11.4 with G4EmStandardPhysics_option4 in a voxelised pelvis (2.5 mm voxels; soft tissue, bone, urine and air) built from the anatomy meshes. Photons start at the X-ray target 100 cm above the isocentre and are aimed over a 10 × 10 cm field, with energies drawn from the Mohan et al. (1985) 6 MV spectrum. We kept photons whose first interaction was a Compton scatter in the prostate and recorded the recoil electron and all its secondaries with a 1 µm production cut.",
             f"From that event we took one delta electron of {f('deltaE')} created {runs['primary_E_handoff_keV']:.0f} keV into the recoil electron's slowing-down, inside the prostate.",

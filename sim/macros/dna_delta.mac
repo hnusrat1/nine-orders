@@ -4,7 +4,7 @@
 /run/numberOfThreads 4
 /nine/physics opt4
 /nine/out work/runs/dna_delta
-/nine/energy 2.1798 keV
+/nine/energy 3.2663 keV
 /nine/start 0 0 0 nm
 /nine/dir 0 0 1
 /nine/half 3 3 3 um

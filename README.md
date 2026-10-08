@@ -41,7 +41,7 @@ then open http://localhost:8000 (WebXR needs HTTPS or localhost). On a Quest, op
 Everything in `assets/data/` and `assets/models/` is produced by `sim/regenerate.sh`: Geant4 11.4.3 from conda-forge, Geant4-DNA, Python, and Blender as a Python module. See [`sim/README.md`](sim/README.md) for the one-time setup, each step, and the data format.
 
 ```
-sim/regenerate.sh            # about 15 minutes on 4 cores
+sim/regenerate.sh            # about 6 minutes on 4 cores
 python3 sim/check_physics.py # recompute every on-screen number from the data files
 ```
 

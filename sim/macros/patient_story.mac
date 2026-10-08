@@ -11,7 +11,8 @@
 /nine/targetRadius 15 mm
 /nine/eMin 0.3 MeV
 /nine/eMax 1.0 MeV
-/nine/maxSelected 60
+# keep every qualifying event so the result does not depend on thread timing
+/nine/maxSelected 100000000
 /nine/nx 184
 /nine/ny 128
 /nine/nz 176
@@ -25,4 +26,4 @@
 /run/setCut 1 mm
 /run/setCutForRegion phantom 0.001 mm
 /random/setSeeds 20251008 6
-/run/beamOn 400000
+/run/beamOn 100000
