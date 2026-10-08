@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Nine Orders</title>
+<meta name="description" content="Follow one 6 MV radiotherapy photon from the linac to a DNA double-strand break, across nine orders of magnitude.">
+<meta name="theme-color" content="#05070a">
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.min.js",
+    "three/addons/": "./vendor/three/addons/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="hud" hidden>
+  <canvas id="logstrip" width="220" height="640" aria-label="Scale position from one metre to one nanometre"></canvas>
+  <div id="subtitles" role="status" aria-live="polite"></div>
+  <div id="label" hidden></div>
+  <div id="hint"></div>
+  <div id="vignette"></div>
+  <button id="menu-btn" type="button" aria-label="Open menu">Menu</button>
+</div>
+
+<div id="menu">
+  <div class="panel">
+    <h1>Nine Orders</h1>
+    <p class="lede">One 6&nbsp;MV radiotherapy photon, followed from the linear accelerator to a break in DNA. One continuous zoom from 1&nbsp;m to 1&nbsp;nm.</p>
+    <div class="row buttons">
+      <button id="btn-vr" type="button" hidden>Enter VR</button>
+      <button id="btn-start" type="button">Start</button>
+    </div>
+    <div class="row">
+      <span class="lbl">Mode</span>
+      <div class="seg" role="radiogroup" aria-label="Mode">
+        <button type="button" data-mode="guided" aria-pressed="true">Guided</button>
+        <button type="button" data-mode="explore" aria-pressed="false">Explore</button>
+      </div>
+    </div>
+    <div class="row">
+      <span class="lbl">Narration</span>
+      <div class="seg" role="radiogroup" aria-label="Narration">
+        <button type="button" data-voice="on" aria-pressed="true">On</button>
+        <button type="button" data-voice="off" aria-pressed="false">Muted</button>
+      </div>
+    </div>
+    <div class="row"><button id="btn-about" type="button" class="link">About the physics and sources</button></div>
+    <p id="status" class="small"></p>
+    <p class="small controls-help">
+      <b>Desktop</b>: scroll or W/S to zoom, drag to orbit, click to pause and label.<br>
+      <b>Phone</b>: pinch to zoom, drag to orbit, tap to pause.<br>
+      <b>VR</b>: stick forward/back to zoom, trigger to pause and label, grip to grab and rotate, A/X switches Guided/Explore, B/Y mutes narration.
+    </p>
+  </div>
+</div>
+
+<div id="about" hidden>
+  <div class="panel scroll">
+    <button id="about-close" type="button" class="close" aria-label="Close">&times;</button>
+    <div id="about-body">Loading…</div>
+  </div>
+</div>
+
+<noscript>Nine Orders needs JavaScript and WebGL.</noscript>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,554 @@
+{
+ "synthetic": true,
+ "generator": "sim/synthetic.py",
+ "frames": {
+  "patient": "mm; origin at the Compton interaction point; +y anterior (towards the gantry head at 0°), -z superior (towards the gantry)",
+  "tissue": "µm; same origin and axes as patient",
+  "cell": "µm; origin at the hand-off point (delta electron production); patient axes",
+  "chromatin": "nm; origin at the hand-off point; patient axes",
+  "dna": "nm; origin at the DSB site; patient axes"
+ },
+ "geometry": {
+  "iso_mm": [
+   -8.0,
+   5.0,
+   -12.0
+  ],
+  "source_mm": [
+   -8.0,
+   1005.0,
+   -12.0
+  ],
+  "isoHeight_mm": 1250,
+  "couchTop_mm": -105.0,
+  "field_mm": [
+   100,
+   100
+  ]
+ },
+ "photon": {
+  "E0": 2.0,
+  "dirIn": [
+   0.007959379487780967,
+   -0.9998970481524839,
+   0.011939069231671451
+  ],
+  "E1": 1.171082752033971,
+  "dirOut": [
+   -0.5046394074733593,
+   -0.820029750713545,
+   0.2699819926765825
+  ]
+ },
+ "electron": {
+  "E0": 0.828917247966029,
+  "dir": [
+   0.4899632140892572,
+   -0.8391965720659017,
+   -0.2359770375951111
+  ]
+ },
+ "handoff": {
+  "kind": "delta",
+  "origin_mm": [
+   0.06000240890380648,
+   -0.510905140573912,
+   -0.17193291611420872
+  ],
+  "E_keV": 2.5,
+  "parentE_keV": 534.922340940291,
+  "dir": [
+   0.5311567721501808,
+   0.4908472666912285,
+   0.6906094729879912
+  ],
+  "cell": {
+   "centre_um": [
+    2.0,
+    -1.0,
+    1.5
+   ],
+   "radius_um": 6.5,
+   "nucleusCentre_um": [
+    1.0,
+    -0.5,
+    0.8
+   ],
+   "nucleusRadius_um": 4.5
+  }
+ },
+ "dsb": {
+  "site_nm": [
+   -45.20070865175914,
+   22.893076724307043,
+   28.78765737616894
+  ],
+  "axis": [
+   0.5842600572050225,
+   -0.012985495774441547,
+   -0.8114626069353261
+  ],
+  "ssb": [
+   {
+    "strand": 0,
+    "bp": 11,
+    "edep_eV": 24.0,
+    "pos_nm": [
+     -0.8205577988927263,
+     0.20686077298798927,
+     -0.2057521746366297
+    ],
+    "time_ns": 0.0013874829333235964
+   },
+   {
+    "strand": 1,
+    "bp": 13,
+    "edep_eV": 31.0,
+    "pos_nm": [
+     1.0108248625977678,
+     -0.3528238843934474,
+     -0.35883056228839977
+    ],
+    "time_ns": 0.001420097819440948
+   }
+  ],
+  "pair": [
+   0,
+   1
+  ],
+  "separation_bp": 2,
+  "showRadius_nm": 5.0
+ },
+ "anatomy": [
+  {
+   "id": "body",
+   "label": "Body outline",
+   "center_mm": [
+    -8.0,
+    5.0,
+    -12.0
+   ],
+   "radii_mm": [
+    180,
+    115,
+    210
+   ],
+   "color": "#7f9fb8",
+   "rim": 2.6,
+   "strength": 0.7
+  },
+  {
+   "id": "prostate",
+   "label": "Prostate (the target)",
+   "center_mm": [
+    -8.0,
+    5.0,
+    -12.0
+   ],
+   "radii_mm": [
+    22,
+    17,
+    20
+   ],
+   "color": "#ffb35c",
+   "rim": 1.6,
+   "base": 0.08
+  },
+  {
+   "id": "bladder",
+   "label": "Bladder",
+   "center_mm": [
+    -8.0,
+    30.0,
+    -50.0
+   ],
+   "radii_mm": [
+    40,
+    30,
+    34
+   ],
+   "color": "#6fd0c0"
+  },
+  {
+   "id": "rectum",
+   "label": "Rectum",
+   "center_mm": [
+    -8.0,
+    -31.0,
+    -6.0
+   ],
+   "radii_mm": [
+    17,
+    17,
+    45
+   ],
+   "color": "#c78a8a"
+  },
+  {
+   "id": "femur_r",
+   "label": "Femoral head",
+   "center_mm": [
+    -100.0,
+    5.0,
+    0.0
+   ],
+   "radii_mm": [
+    24,
+    24,
+    24
+   ],
+   "color": "#e8e2d0"
+  },
+  {
+   "id": "femur_l",
+   "label": "Femoral head",
+   "center_mm": [
+    84.0,
+    5.0,
+    0.0
+   ],
+   "radii_mm": [
+    24,
+    24,
+    24
+   ],
+   "color": "#e8e2d0"
+  },
+  {
+   "id": "hip_r",
+   "label": "Hip bone",
+   "center_mm": [
+    -103.0,
+    20.0,
+    -72.0
+   ],
+   "radii_mm": [
+    22,
+    60,
+    55
+   ],
+   "color": "#e8e2d0"
+  },
+  {
+   "id": "hip_l",
+   "label": "Hip bone",
+   "center_mm": [
+    87.0,
+    20.0,
+    -72.0
+   ],
+   "radii_mm": [
+    22,
+    60,
+    55
+   ],
+   "color": "#e8e2d0"
+  }
+ ],
+ "numbers": {
+  "photonE0": {
+   "value": 2.0,
+   "unit": "MeV",
+   "label": "Photon energy",
+   "derivation": "SYNTHETIC placeholder",
+   "digits": 3
+  },
+  "photonE1": {
+   "value": 1.171082752033971,
+   "unit": "MeV",
+   "label": "Scattered photon energy",
+   "derivation": "SYNTHETIC: Compton formula at θ = 35°",
+   "digits": 3
+  },
+  "photonAngle": {
+   "value": 35.0,
+   "unit": "°",
+   "label": "Photon scattering angle",
+   "derivation": "SYNTHETIC placeholder",
+   "digits": 2
+  },
+  "electronE0": {
+   "value": 0.828917247966029,
+   "unit": "MeV",
+   "label": "Recoil electron energy",
+   "derivation": "SYNTHETIC: E0 − E1",
+   "digits": 3
+  },
+  "depth": {
+   "value": 110.0,
+   "unit": "mm",
+   "label": "Depth of the interaction",
+   "derivation": "SYNTHETIC placeholder",
+   "digits": 2
+  },
+  "electronPath": {
+   "value": 1.1500000000000006,
+   "unit": "mm",
+   "label": "Electron path length",
+   "derivation": "SYNTHETIC random walk",
+   "digits": 2
+  },
+  "letPrimary": {
+   "value": 0.2,
+   "unit": "keV/µm",
+   "label": "Energy loss of the fast electron",
+   "derivation": "SYNTHETIC placeholder (textbook value)",
+   "digits": 2
+  },
+  "deltaE": {
+   "value": 2.5,
+   "unit": "keV",
+   "label": "Delta electron energy",
+   "derivation": "SYNTHETIC placeholder",
+   "digits": 2
+  },
+  "deltaRange": {
+   "value": 100.4519437022566,
+   "unit": "nm",
+   "label": "Delta electron path length",
+   "derivation": "SYNTHETIC random walk",
+   "digits": 2
+  },
+  "nucleusDiameter": {
+   "value": 9.0,
+   "unit": "µm",
+   "label": "Nucleus diameter",
+   "derivation": "Illustrative model cell",
+   "digits": 2
+  },
+  "nrl": {
+   "value": 187.0,
+   "unit": "bp",
+   "label": "Nucleosome repeat length",
+   "derivation": "SYNTHETIC placeholder",
+   "digits": 3
+  },
+  "dsbSeparation": {
+   "value": 2.0,
+   "unit": "bp",
+   "label": "Separation of the two strand breaks",
+   "derivation": "SYNTHETIC placeholder",
+   "digits": 2
+  },
+  "tracksPerNucleus2Gy": {
+   "value": 2000.0,
+   "unit": "",
+   "label": "Electron tracks through one nucleus in 2 Gy",
+   "derivation": "SYNTHETIC placeholder",
+   "digits": 2
+  }
+ },
+ "eventTypes": {
+  "0": "elastic",
+  "1": "electronic excitation",
+  "2": "ionisation",
+  "3": "vibrational excitation",
+  "4": "dissociative attachment",
+  "6": "track start",
+  "10": "condensed-history step"
+ },
+ "notes": [
+  {
+   "h": "Skeleton build",
+   "p": [
+    "Geometry here is placeholder and every track is a random walk. The structure of the journey, controls and data format are final; the physics is not yet in."
+   ]
+  }
+ ],
+ "sources": [
+  "Drew HR, et al. Structure of a B-DNA dodecamer. PNAS 78:2179 (1981). PDB 1BNA."
+ ],
+ "datasets": {
+  "patientElectron": {
+   "url": "patientElectron.bin",
+   "count": 40,
+   "fields": {
+    "pos": {
+     "offset": 0,
+     "type": "f32",
+     "size": 3
+    },
+    "edep": {
+     "offset": 480,
+     "type": "f32",
+     "size": 1
+    },
+    "time": {
+     "offset": 640,
+     "type": "f32",
+     "size": 1
+    },
+    "type": {
+     "offset": 800,
+     "type": "u8",
+     "size": 1
+    },
+    "track": {
+     "offset": 840,
+     "type": "u16",
+     "size": 1
+    },
+    "ekin": {
+     "offset": 920,
+     "type": "f32",
+     "size": 1
+    }
+   },
+   "units": {
+    "pos": "mm",
+    "edep": "keV",
+    "time": "ns",
+    "ekin": "keV"
+   }
+  },
+  "cellPrimary": {
+   "url": "cellPrimary.bin",
+   "count": 171,
+   "fields": {
+    "pos": {
+     "offset": 0,
+     "type": "f32",
+     "size": 3
+    },
+    "edep": {
+     "offset": 2052,
+     "type": "f32",
+     "size": 1
+    },
+    "time": {
+     "offset": 2736,
+     "type": "f32",
+     "size": 1
+    },
+    "type": {
+     "offset": 3420,
+     "type": "u8",
+     "size": 1
+    },
+    "track": {
+     "offset": 3592,
+     "type": "u16",
+     "size": 1
+    }
+   },
+   "units": {
+    "pos": "µm",
+    "edep": "eV",
+    "time": "ns"
+   }
+  },
+  "delta": {
+   "url": "delta.bin",
+   "count": 85,
+   "fields": {
+    "pos": {
+     "offset": 0,
+     "type": "f32",
+     "size": 3
+    },
+    "edep": {
+     "offset": 1020,
+     "type": "f32",
+     "size": 1
+    },
+    "time": {
+     "offset": 1360,
+     "type": "f32",
+     "size": 1
+    },
+    "type": {
+     "offset": 1700,
+     "type": "u8",
+     "size": 1
+    },
+    "track": {
+     "offset": 1788,
+     "type": "u16",
+     "size": 1
+    }
+   },
+   "units": {
+    "pos": "nm",
+    "edep": "eV",
+    "time": "ns"
+   }
+  },
+  "nucleosomes": {
+   "url": "nucleosomes.bin",
+   "count": 26,
+   "fields": {
+    "pos": {
+     "offset": 0,
+     "type": "f32",
+     "size": 3
+    },
+    "quat": {
+     "offset": 312,
+     "type": "f32",
+     "size": 4
+    }
+   },
+   "units": {
+    "pos": "nm"
+   }
+  },
+  "linkers": {
+   "url": "linkers.bin",
+   "count": 157,
+   "fields": {
+    "pos": {
+     "offset": 0,
+     "type": "f32",
+     "size": 3
+    },
+    "time": {
+     "offset": 1884,
+     "type": "f32",
+     "size": 1
+    },
+    "track": {
+     "offset": 2512,
+     "type": "u16",
+     "size": 1
+    }
+   },
+   "units": {
+    "pos": "nm"
+   }
+  },
+  "dnaAtoms": {
+   "url": "dnaAtoms.bin",
+   "count": 984,
+   "fields": {
+    "pos": {
+     "offset": 0,
+     "type": "f32",
+     "size": 3
+    },
+    "elem": {
+     "offset": 11808,
+     "type": "u8",
+     "size": 1
+    },
+    "strand": {
+     "offset": 12792,
+     "type": "u8",
+     "size": 1
+    },
+    "bp": {
+     "offset": 13776,
+     "type": "i32",
+     "size": 1
+    },
+    "backbone": {
+     "offset": 17712,
+     "type": "u8",
+     "size": 1
+    }
+   },
+   "units": {
+    "pos": "nm"
+   }
+  }
+ }
+}

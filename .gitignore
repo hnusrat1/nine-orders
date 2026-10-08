@@ -1,0 +1,9 @@
+tests/node_modules/
+tests/screenshots/
+tests/*.log
+sim/build/
+sim/runs/
+sim/work/
+__pycache__/
+*.pyc
+.DS_Store

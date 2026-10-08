@@ -1,0 +1,16 @@
+{
+  "name": "nine-orders-tests",
+  "private": true,
+  "type": "module",
+  "description": "Test harness only. Never shipped: the IWER page is generated in memory by run-xr.mjs.",
+  "scripts": {
+    "desktop": "node run-desktop.mjs",
+    "xr": "node run-xr.mjs",
+    "physics": "python3 ../sim/check_physics.py",
+    "all": "node run-desktop.mjs && node run-xr.mjs && python3 ../sim/check_physics.py"
+  },
+  "devDependencies": {
+    "iwer": "2.5.0",
+    "playwright": "1.56.1"
+  }
+}
