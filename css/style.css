@@ -51,3 +51,50 @@ button.link { border: 0; padding: 0; color: var(--accent); text-decoration: unde
   h1 { font-size: 24px; }
   .lbl { width: 70px; }
 }
+
+/* ---------------------------------------------------------------- intro screen */
+.panel.intro { width: min(980px, 100%); display: grid; grid-template-columns: 1.35fr 1fr; gap: 28px; max-height: calc(100% - 32px); overflow-y: auto; }
+.intro h2 { color: var(--accent); font-size: 15px; font-weight: 600; letter-spacing: 0.02em; margin: 6px 0 8px; }
+.intro h3, #controls-card h3 { font-size: 13px; font-weight: 600; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.08em; margin: 14px 0 6px; }
+#intro-facts ol { margin: 0; padding-left: 20px; line-height: 1.5; font-size: 14.5px; }
+#intro-facts li { margin: 0 0 8px; }
+#intro-facts b { color: var(--ink); font-weight: 600; }
+#intro-facts .n { color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.intro-side { border-left: 1px solid var(--line); padding-left: 24px; }
+.mode-help { margin: -2px 0 6px; }
+.howto p, #controls-card p { margin: 5px 0; font-size: 13.5px; line-height: 1.5; color: var(--ink-dim); }
+kbd { display: inline-block; min-width: 18px; padding: 1px 6px; margin: 0 1px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; font: 12px/1.5 ui-monospace, monospace; color: var(--ink); background: rgba(255,255,255,0.04); text-align: center; }
+.ctl-touch, .ctl-vr { display: none; }
+body.touch .ctl-touch { display: block; }
+body.touch .ctl-desktop { display: none; }
+body.xr-capable .ctl-vr { display: block; }
+@media (max-width: 760px) {
+  .panel.intro { grid-template-columns: 1fr; gap: 10px; padding: 18px; }
+  .intro-side { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); padding-top: 10px; }
+  #intro-facts ol { font-size: 13.5px; }
+}
+
+/* ---------------------------------------------------------------- in-experience HUD */
+#toolbar { position: absolute; top: 10px; right: 12px; display: flex; gap: 6px; pointer-events: auto; flex-wrap: wrap; justify-content: flex-end; max-width: calc(100% - 24px); }
+#toolbar button { font-size: 13px; padding: 6px 11px; background: rgba(5, 7, 10, 0.62); backdrop-filter: blur(4px); }
+#toolbar #tb-help { font-weight: 700; width: 34px; padding: 6px 0; }
+#menu-btn { display: none; }
+#stage-title { position: absolute; top: 18%; left: 50%; transform: translateX(-50%); text-align: center; opacity: 0; transition: opacity 0.8s; text-shadow: 0 2px 12px #000; pointer-events: none; }
+#stage-title.show { opacity: 1; }
+#stage-title .num { display: block; font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); }
+#stage-title .name { display: block; font-size: 34px; font-weight: 300; letter-spacing: 0.05em; margin: 4px 0; }
+#stage-title .scale { display: block; font-size: 14px; color: var(--ink-dim); }
+#progress { position: absolute; left: 50%; bottom: max(84px, calc(env(safe-area-inset-bottom) + 70px)); transform: translateX(-50%); display: flex; gap: 4px; pointer-events: auto; width: min(760px, calc(100% - 32px)); }
+#progress button { flex: 1; min-width: 0; padding: 7px 2px 5px; border: 0; border-radius: 0; border-top: 3px solid rgba(232,237,242,0.18); font-size: 11.5px; color: var(--ink-dim); background: transparent; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#progress button.done { border-top-color: rgba(255, 179, 92, 0.55); }
+#progress button.now { border-top-color: var(--accent); color: var(--ink); }
+#controls-card { position: absolute; left: 14px; bottom: 14px; width: min(380px, calc(100% - 28px)); padding: 6px 16px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; pointer-events: auto; }
+#controls-card button { margin-top: 6px; }
+#controls-card[hidden] { display: none; }
+@media (max-width: 600px) {
+  #stage-title .name { font-size: 24px; }
+  #progress { bottom: 92px; }
+  #progress button { font-size: 10px; }
+  #toolbar button { font-size: 12px; padding: 5px 8px; }
+  #toolbar #tb-voice, #toolbar #tb-mode { display: none; }
+}

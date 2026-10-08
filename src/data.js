@@ -26,5 +26,5 @@ export function fmt(entry, digits) {
   const r = +v.toPrecision(d);
   const s = Math.abs(r) >= 1000 ? r.toLocaleString('en-US') : r.toString();
   if (!entry.unit) return s;
-  return entry.unit === '°' ? `${s}°` : `${s} ${entry.unit}`;
+  return entry.unit === '°' || entry.unit === '%' ? `${s}${entry.unit}` : `${s} ${entry.unit}`;
 }

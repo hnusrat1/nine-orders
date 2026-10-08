@@ -4,7 +4,7 @@ Gaussian density of the heavy atoms (histone octamer and DNA separately),
 iso-surface by marching cubes, decimated in Blender. Coordinates are the
 1KX5 coordinates as distributed in the nucleosome reference frame (pynucl,
 1KX5_NRF.pdb), in nm — the same frame sim/dnamap.py places nucleosomes in.
-Output: sim/work/art/nucleosome.glb with meshes "core" and "dna".
+Output: sim/work/art/nucleosome.glb with meshes "core", "dna" and low-detail "core_lo", "dna_lo".
 """
 import os, sys
 import numpy as np
@@ -17,7 +17,7 @@ from bdna import read_pdb  # noqa: E402
 
 OUT = os.path.join(HERE, "..", "work", "art")
 SPACING, SIGMA, LEVEL = 0.15, 0.22, 0.35
-TARGET = {"core": 800, "dna": 900}
+TARGET = {"core": 800, "dna": 900, "core_lo": 150, "dna_lo": 200}  # full detail near the particle, low detail elsewhere
 
 
 def surface(P):
@@ -59,8 +59,9 @@ def main():
     objs = []
     for name, P in (("core", hist), ("dna", dna)):
         V, F = surface(P)
-        objs.append(make(name, V, F))
-        print(name, len(P), "atoms →", len(objs[-1].data.polygons), "faces")
+        for nm in (name, name + "_lo"):
+            objs.append(make(nm, V, F))
+            print(nm, len(P), "atoms →", len(objs[-1].data.polygons), "faces")
     for o in objs:
         o.select_set(True)
     bpy.ops.export_scene.gltf(filepath=os.path.join(OUT, "nucleosome.glb"), export_format="GLB", use_selection=True, export_normals=True,

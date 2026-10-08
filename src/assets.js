@@ -21,7 +21,7 @@ export async function loadAssets(index, base = 'assets/models/') {
   if (out.nucleosome) {
     // two meshes: histone core and DNA; used as instanced geometry
     const g = {};
-    out.nucleosome.traverse((o) => { if (o.isMesh) g[o.name.startsWith('dna') ? 'dna' : 'core'] = o.geometry; });
+    out.nucleosome.traverse((o) => { if (o.isMesh) g[(o.name.startsWith('dna') ? 'dna' : 'core') + (o.name.endsWith('_lo') ? 'Lo' : '')] = o.geometry; });
     out.nucleosome = g.core && g.dna ? g : null;
   }
   return out;

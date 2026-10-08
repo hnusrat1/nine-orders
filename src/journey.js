@@ -11,13 +11,23 @@ export const LEVELS = [
   // fade-in [a,b], full [b,c], fade-out [c,d]
   { id: 'room',      name: 'Treatment room', unit: 1,    range: [-9, -9, 0.6, 1.05] },
   { id: 'patient',   name: 'Patient',        unit: 1e-3, range: [0.6, 1.05, 2.35, 2.85] },
-  { id: 'tissue',    name: 'Tissue',         unit: 1e-6, range: [2.35, 2.85, 4.3, 4.75] },
+  { id: 'tissue',    name: 'Tissue',         unit: 1e-6, range: [2.35, 2.85, 4.3, 4.75], smoothTau: 0.5 },
   { id: 'cell',      name: 'Cell',           unit: 1e-6, range: [4.3, 4.75, 6.0, 6.55] },
-  { id: 'chromatin', name: 'Chromatin',      unit: 1e-9, range: [6.0, 6.55, 8.15, 8.55] },
+  { id: 'chromatin', name: 'Chromatin',      unit: 1e-9, range: [6.0, 6.55, 8.15, 8.55], smoothTau: 0.9 },
   { id: 'dna',       name: 'DNA',            unit: 1e-9, range: [8.15, 8.55, 99, 99] },
 ];
 
 export const Z_MIN = 0, Z_MAX = 9.15;
+
+// Titles and jump targets for each stage (guided time, explore zoom)
+export const STAGES = [
+  { id: 'room', num: 'Stage 1 of 6', name: 'Treatment room', scale: '1 metre', jumpT: 0, jumpZ: 0 },
+  { id: 'patient', num: 'Stage 2 of 6', name: 'Patient', scale: '10 centimetres', jumpT: 30, jumpZ: 1.5 },
+  { id: 'tissue', num: 'Stage 3 of 6', name: 'Tissue', scale: '1 millimetre to 100 micrometres', jumpT: 62, jumpZ: 3.6 },
+  { id: 'cell', num: 'Stage 4 of 6', name: 'Cell', scale: '10 micrometres', jumpT: 96, jumpZ: 5.1 },
+  { id: 'chromatin', num: 'Stage 5 of 6', name: 'Chromatin', scale: '100 to 10 nanometres', jumpT: 128, jumpZ: 7.4 },
+  { id: 'dna', num: 'Stage 6 of 6', name: 'DNA', scale: '1 nanometre', jumpT: 164, jumpZ: 8.9 },
+];
 export const D0 = 0.25;
 export const levelScale = (unit, z) => unit * D0 * Math.pow(10, z);
 

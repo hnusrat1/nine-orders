@@ -87,7 +87,14 @@ def recompute(ix, S):
         out["dsbFraction"] = (100 * q["trials_with_dsb"] / q["trials"], "100 × trials_with_dsb / trials", None)
     if "linkerLengths_bp" in R:
         out["nrl"] = (147 + float(np.mean(R["linkerLengths_bp"])), "147 + mean of index.runs.linkerLengths_bp", None)
+    if "story" in R:
+        out["storyPhotons"] = (R["story"]["photons"], "index.runs.story.photons (from the macro)", None)
+        out["storyEvents"] = (R["story"]["qualifying_events"], "index.runs.story.qualifying_events (events in the run output)", None)
+    if "dsbSearch" in R:
+        out["deltaHistories"] = (R["dsbSearch"]["n_histories"], "index.runs.dsbSearch.n_histories", None)
+        out["placements"] = (R["dsbSearch"]["n_histories"] * R["dsbSearch"]["n_rotations"], "n_histories × n_rotations", None)
     if "fluence" in R:
+        out["fluencePhotons"] = (R["fluence"]["events"], "index.runs.fluence.events", None)
         f = R["fluence"]
         V_cm3 = 4 / 3 * math.pi * (f["radius_mm"] / 10) ** 3
         D = f["edep_MeV"] * MEV_J / (f["soft_tissue_density_g_cm3"] * V_cm3 * 1e-3) / f["events"]     # Gy per photon

@@ -6,7 +6,7 @@ Nine Orders code (everything in `src/`, `css/`, `index.html`, `sim/`, `tests/`) 
 
 | What | Where | Licence |
 |---|---|---|
-| three.js r170 (core, GLTFLoader, BufferGeometryUtils, meshopt decoder) | `vendor/three/` | MIT, © 2010–2024 three.js authors (`vendor/three/LICENSE`); the meshopt decoder is MIT, © Arseny Kapoulkine |
+| three.js r170 (core, GLTFLoader, BufferGeometryUtils, meshopt decoder, RoomEnvironment, EffectComposer and the bloom/output passes) | `vendor/three/` | MIT, © 2010–2024 three.js authors (`vendor/three/LICENSE`); the meshopt decoder is MIT, © Arseny Kapoulkine |
 | Geant4 11.4.3 (offline simulation only, not shipped) | `sim/g4/` links against it | Geant4 Software Licence |
 | Blender 5.0 as a Python module, `bpy` (offline modelling only) | `sim/art/` | GPL (the generated models are not covered by Blender's licence) |
 | meshoptimizer `gltfpack` (offline compression only) | `sim/art/pack.sh` | MIT |

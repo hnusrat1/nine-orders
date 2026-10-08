@@ -63,7 +63,8 @@ export class GlowPoints extends THREE.Mesh {
           float r2 = dot(vUv, vUv);
           if (r2 > 1.0) discard;
           float a = exp(-r2 * 5.0) * 0.75 + smoothstep(uCore * uCore, 0.0, r2) * 0.6;
-          gl_FragColor = vec4(vColor * a * vAlpha, 1.0);
+          gl_FragColor = sRGBTransferEOTF(vec4(vColor * a * vAlpha, 1.0)); // authored as display values
+          #include <colorspace_fragment>
         }`,
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     });
@@ -117,7 +118,8 @@ export class Ribbons extends THREE.Mesh {
         varying float vY; varying vec3 vColor; varying float vAlpha;
         void main() {
           float a = 1.0 - pow(abs(vY), mix(8.0, 1.6, uSoft));
-          gl_FragColor = vec4(vColor * a * vAlpha, 1.0);
+          gl_FragColor = sRGBTransferEOTF(vec4(vColor * a * vAlpha, 1.0)); // authored as display values
+          #include <colorspace_fragment>
         }`,
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
     });
@@ -185,18 +187,30 @@ export class CellImpostors extends THREE.Mesh {
       fragmentShader: /* glsl */`
         uniform vec3 uMem, uNuc; uniform float uGain;
         varying vec2 vUv; varying float vNuc, vAlpha, vTint;
+        float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        float noise(vec2 p) {
+          vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
+        }
         void main() {
           float r2 = dot(vUv, vUv);
           if (r2 > 1.0) discard;
           float z = sqrt(1.0 - r2);
+          vec2 q = vUv / (1.0 + z) * 3.0 + vTint * 17.0;           // pseudo-spherical coordinates for texture
           float rim = pow(1.0 - z, 3.0);
-          vec3 col = uMem * (0.015 + 0.42 * rim) * (0.75 + 0.5 * vTint);
-          float rn2 = r2 / (vNuc * vNuc);
+          float mem = rim * (0.7 + 0.6 * noise(q * 4.0));           // uneven membrane
+          vec3 col = uMem * (0.012 + 0.42 * mem + 0.035 * noise(q * 11.0)) * (0.75 + 0.5 * vTint);
+          vec2 nc = vUv - vec2(0.08, -0.05) * vNuc;                  // nucleus slightly off-centre
+          float rn2 = dot(nc, nc) / (vNuc * vNuc);
           if (rn2 < 1.0) {
             float zn = sqrt(1.0 - rn2);
-            col += uNuc * (0.03 + 0.25 * pow(1.0 - zn, 2.0));
+            float chrom = 0.6 + 0.8 * noise(q * 9.0 + 3.1);          // chromatin texture
+            col += uNuc * (0.05 + 0.34 * pow(1.0 - zn, 2.0)) * chrom;
+            float nucleolus = smoothstep(0.32, 0.18, length(nc / vNuc - vec2(-0.25, 0.2)));
+            col += uNuc * 0.12 * nucleolus;
           }
-          gl_FragColor = vec4(col * vAlpha * uGain, 1.0);
+          gl_FragColor = sRGBTransferEOTF(vec4(col * vAlpha * uGain, 1.0)); // authored as display values
+          #include <colorspace_fragment>
         }`,
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     });
@@ -249,7 +263,8 @@ export function fresnelMaterial({ color = 0x88aacc, rim = 2.2, base = 0.06, stre
       varying vec3 vN; varying vec3 vV; varying vec3 vTint;
       void main() {
         float f = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), uRim);
-        gl_FragColor = vec4(uColor * vTint * (uBase + f) * uStrength * uOpacity, 1.0);
+        gl_FragColor = sRGBTransferEOTF(vec4(uColor * vTint * (uBase + f) * uStrength * uOpacity, 1.0)); // authored as display values
+          #include <colorspace_fragment>
       }`,
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side,
   });
@@ -257,8 +272,8 @@ export function fresnelMaterial({ color = 0x88aacc, rim = 2.2, base = 0.06, stre
 
 // Opaque lit material that can still fade (dithered alpha, no sorting).
 export function solidMaterial(params) {
-  const m = new THREE.MeshStandardMaterial({ roughness: 0.75, metalness: 0.0, ...params });
-  m.alphaHash = true;
+  // transparent (with depth writes) so whole levels can cross-fade by opacity
+  const m = new THREE.MeshStandardMaterial({ roughness: 0.75, metalness: 0.0, transparent: true, depthWrite: true, ...params });
   return m;
 }
 

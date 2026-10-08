@@ -2,9 +2,11 @@
 // only in memory here: index.html plus one module that installs IWER before the
 // app loads. Nothing in this file is served by GitHub Pages.
 //
-// Checks: Enter VR works; the trigger selects the photon; Guided mode plays end
-// to end; the left stick scrubs zoom (Guided) and zooms (Explore); the trigger
-// pauses and shows a label; no console errors. Logs frame times.
+// Checks: Enter VR works and shows the welcome panel; the trigger selects the
+// photon; Guided mode plays end to end; the right stick zooms (scrubs in Guided)
+// and snap-turns; the left stick walks; B opens the menu and its buttons work;
+// the trigger pauses and labels; the grip grabs the scene; no console errors.
+// Logs frame times.
 import { chromium } from 'playwright';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -45,7 +47,9 @@ await page.waitForFunction(() => window.__nine.state().presenting, null, { timeo
 if ((await st()).presenting) ok('entered immersive-vr (IWER Quest 3)');
 
 // helpers to drive controllers
+// Controllers live in the player rig, so world-space targets are converted to rig space first.
 const aim = (hand, target, from = [0.15 * (hand === 'right' ? 1 : -1), 1.35, 0.1]) => page.evaluate(({ hand, target, from }) => {
+  target = window.__nine.worldToRig(target);
   const c = window.__iwer.controllers[hand];
   c.position.set(...from);
   const d = [target[0] - from[0], target[1] - from[1], target[2] - from[2]];
@@ -64,7 +68,22 @@ const press = async (hand, button, ms = 120) => {
   await page.evaluate(({ hand, button }) => window.__iwer.controllers[hand].updateButtonValue(button, 0), { hand, button });
   await wait(ms);
 };
-const stick = (hand, y) => page.evaluate(({ hand, y }) => window.__iwer.controllers[hand].updateAxes('thumbstick', 0, y), { hand, y });
+const stick = (hand, y, x = 0) => page.evaluate(({ hand, y, x }) => window.__iwer.controllers[hand].updateAxes('thumbstick', x, y), { hand, y, x });
+const clickMenu = async (id) => {
+  const p = await page.evaluate((id) => window.__nine.menuButtonWorld(id), id);
+  if (!p) { fail('menu button not found: ' + id); return; }
+  await aim('right', p);
+  await wait(150);
+  await press('right', 'trigger');
+};
+
+// 0. The welcome panel explains the controls; Start begins the journey
+await wait(500);
+let s0 = await st();
+if (s0.menuOpen && s0.paused) ok('welcome panel shown on entering VR (journey paused)'); else fail(`welcome panel not shown (menuOpen=${s0.menuOpen}, paused=${s0.paused})`);
+await clickMenu('primary');
+s0 = await st();
+if (!s0.menuOpen && !s0.paused) ok('trigger on Start closes the welcome panel and starts'); else fail('Start button did not start');
 
 // 1. Room: wait for time to stop, then aim the right controller at the photon and pull the trigger
 await page.evaluate(() => window.__nine.setT(16));
@@ -89,7 +108,7 @@ await page.evaluate(() => { window.__nine.setT(0); window.__nine.setSpeed(10); }
 const t0 = Date.now();
 const seen = new Set();
 let maxCalls = 0;
-while (!(await st()).ended && Date.now() - t0 < 90000) {
+while (!(await st()).ended && Date.now() - t0 < 240000) {
   const s = await st();
   seen.add(s.dominant);
   maxCalls = Math.max(maxCalls, s.drawCalls || 0);
@@ -102,29 +121,54 @@ if (seen.size < 6) fail('not every level was dominant during the run');
 if (maxCalls > 150) fail(`draw calls ${maxCalls} > 150`);
 await page.evaluate(() => window.__nine.setSpeed(1));
 
-// 3. Stick scrub in Guided: forward advances the timeline faster than real time, back rewinds
+// 3. Right stick up/down scrubs the zoom in Guided
 await page.evaluate(() => { window.__nine.setT(100); });
 await wait(200);
-let a = (await st()).T;
-await stick('left', -1); await wait(2000); await stick('left', 0);
-let b = (await st()).T;
-if (b - a > 4) ok(`left stick forward scrubs zoom in (T ${a.toFixed(1)} → ${b.toFixed(1)})`); else fail(`stick forward did not scrub (T ${a} → ${b})`);
-a = b;
-await stick('left', 1); await wait(2000); await stick('left', 0);
-b = (await st()).T;
-if (b < a - 3) ok(`left stick back scrubs zoom out (T ${a.toFixed(1)} → ${b.toFixed(1)})`); else fail(`stick back did not scrub (T ${a} → ${b})`);
+// (compared with simulated time, so slow software rendering does not matter: playback alone gives ΔT = Δt)
+let sa = await st();
+await stick('right', -1); await wait(2000); await stick('right', 0);
+let sb = await st();
+let rate = (sb.T - sa.T) / Math.max(sb.time - sa.time, 1e-6);
+if (rate > 4) ok(`right stick forward scrubs zoom in (${rate.toFixed(1)}× playback speed)`); else fail(`stick forward did not scrub (rate ${rate.toFixed(2)})`);
+sa = sb;
+await stick('right', 1); await wait(2000); await stick('right', 0);
+sb = await st();
+rate = (sb.T - sa.T) / Math.max(sb.time - sa.time, 1e-6);
+if (rate < -3) ok(`right stick back scrubs zoom out (${rate.toFixed(1)}× playback speed)`); else fail(`stick back did not scrub (rate ${rate.toFixed(2)})`);
 
-// 4. Explore: A button toggles mode; stick changes z directly
-await press('right', 'a-button');
-if ((await st()).mode === 'explore') ok('A button switches to Explore'); else fail('A button did not switch mode');
-let z0 = (await st()).z;
+// 4. B opens the menu; the Mode button switches to Explore; B closes it; the right stick then zooms freely
+await press('right', 'b-button');
+if ((await st()).menuOpen) ok('B opens the menu'); else fail('B did not open the menu');
+await clickMenu('mode');
+if ((await st()).mode === 'explore') ok('menu Mode button switches to Explore'); else fail('menu Mode button did not switch mode');
+await clickMenu('voice');
+if ((await st()).voice === false) ok('menu Narration button mutes'); else fail('menu Narration button did not mute');
+await clickMenu('voice');
+await press('right', 'b-button');
+if (!(await st()).menuOpen) ok('B closes the menu'); else fail('B did not close the menu');
+const e0 = await st();
 await stick('right', -1); await wait(1600); await stick('right', 0);
-let z1 = (await st()).z;
-if (z1 > z0 + 0.3) ok(`stick zooms in Explore (z ${z0.toFixed(2)} → ${z1.toFixed(2)})`); else fail(`explore stick zoom failed (${z0} → ${z1})`);
+const e1 = await st();
+const zr = (e1.z - e0.z) / Math.max(e1.time - e0.time, 1e-6);
+if (zr > 0.4) ok(`right stick zooms in Explore (${zr.toFixed(2)} orders of magnitude per second)`); else fail(`explore stick zoom failed (rate ${zr.toFixed(3)})`);
 
-// 5. Trigger pauses and labels what it points at (patient level: the interaction point)
+// 5. Left stick walks; right stick left/right snap-turns
+const p0 = await page.evaluate(() => window.__nine.player());
+await stick('left', -1); await wait(1200); await stick('left', 0);
+const p1 = await page.evaluate(() => window.__nine.player());
+const moved = Math.hypot(p1.pos[0] - p0.pos[0], p1.pos[2] - p0.pos[2]);
+if (moved > 0.25) ok(`left stick walks (${moved.toFixed(2)} m)`); else fail(`left stick did not move the player (${moved.toFixed(3)} m)`);
+await stick('right', 0, 1); await wait(250); await stick('right', 0, 0); await wait(150);
+const p2 = await page.evaluate(() => window.__nine.player());
+const turned = Math.abs(p2.yaw - p1.yaw) * 57.3;
+if (Math.abs(turned - 30) < 1) ok(`right stick snap-turns ${turned.toFixed(0)}°`); else fail(`snap turn was ${turned.toFixed(1)}°`);
+await stick('right', 0, -1); await wait(250); await stick('right', 0, 0); await wait(150);
+
+// 6. Trigger pauses and labels what it points at (patient level: the interaction point)
+await press('right', 'b-button'); await clickMenu('recenter');
+if ((await st()).menuOpen || (await st()).paused) fail('Recenter should close the menu and resume');
 await page.evaluate(() => { window.__nine.setMode('guided'); window.__nine.setT(52); });
-await wait(400);
+await wait(600);
 const anchor = await page.evaluate(() => window.__nine.anchorWorld());
 await aim('right', anchor);
 await wait(200);
@@ -135,16 +179,19 @@ if (s5.paused && label.length > 5) ok(`trigger pauses and labels: "${label.slice
 await press('right', 'trigger');
 if (!(await st()).paused) ok('trigger again resumes'); else fail('trigger did not resume');
 
-// 6. Grip rotates the current object
+// 7. Grip grabs the scene: it follows the hand (move and turn)
 const q0 = await page.evaluate(() => window.__nine.userQuat());
-await page.evaluate(() => window.__iwer.controllers.right.updateButtonValue('squeeze', 1));
+const a0 = await page.evaluate(() => window.__nine.anchorWorld());
+await page.evaluate(() => { const c = window.__iwer.controllers.right; c.quaternion.set(0, 0, 0, 1); c.updateButtonValue('squeeze', 1); });
 await wait(150);
-await page.evaluate(() => { const q = window.__iwer.controllers.right.quaternion; q.set(0, Math.sin(0.4), 0, Math.cos(0.4)); });
+await page.evaluate(() => { const c = window.__iwer.controllers.right; c.quaternion.set(0, Math.sin(0.4), 0, Math.cos(0.4)); c.position.set(c.position.x + 0.2, c.position.y, c.position.z); });
 await wait(300);
 await page.evaluate(() => window.__iwer.controllers.right.updateButtonValue('squeeze', 0));
 const q1 = await page.evaluate(() => window.__nine.userQuat());
+const a1 = await page.evaluate(() => window.__nine.anchorWorld());
 const dq = Math.abs(q0[0] * q1[0] + q0[1] * q1[1] + q0[2] * q1[2] + q0[3] * q1[3]);
-if (dq < 0.995) ok(`grip grabs and rotates the current object (rotation ${(2 * Math.acos(Math.min(1, dq)) * 57.3).toFixed(0)}°)`); else fail('grip did not rotate the object');
+const da = Math.hypot(a1[0] - a0[0], a1[1] - a0[1], a1[2] - a0[2]);
+if (dq < 0.995 && da > 0.05) ok(`grip grabs the scene: turned ${(2 * Math.acos(Math.min(1, dq)) * 57.3).toFixed(0)}°, moved ${da.toFixed(2)} m`); else fail(`grip grab failed (dq=${dq}, moved ${da})`);
 
 // frame times
 const ft = await page.evaluate(() => window.__nine.frameTimes.slice());

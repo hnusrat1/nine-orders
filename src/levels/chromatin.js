@@ -33,17 +33,23 @@ export class ChromatinLevel extends Level {
     const ix = data.index, n = data.n;
     const N = data.sets.nucleosomes;
     const geoms = assets.nucleosome || nucleosomeGeometries();
-    const mCore = nearFade(solidMaterial({ color: 0x6f5fa8, roughness: 0.6 }), 0.45);
-    const mDna = nearFade(solidMaterial({ color: 0xd2a862, roughness: 0.5 }), 0.45);
+    const mCore = nearFade(solidMaterial({ color: 0x4f4190, roughness: 0.62 }), 0.45);
+    const mDna = nearFade(solidMaterial({ color: 0xa8792f, roughness: 0.5 }), 0.45);
+    // Two levels of detail: full surfaces for the nucleosomes nearest the particle, light ones elsewhere.
     this.core = new THREE.InstancedMesh(geoms.core, mCore, N.count);
     this.dna = new THREE.InstancedMesh(geoms.dna, mDna, N.count);
+    this.coreLo = new THREE.InstancedMesh(geoms.coreLo || geoms.core, mCore, N.count);
+    this.dnaLo = new THREE.InstancedMesh(geoms.dnaLo || geoms.dna, mDna, N.count);
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1);
+    this.nucMatrices = [];
     for (let i = 0; i < N.count; i++) {
       p.fromArray(N.pos, 3 * i); q.fromArray(N.quat, 4 * i);
-      m.compose(p, q, one);
-      this.core.setMatrixAt(i, m); this.dna.setMatrixAt(i, m);
+      this.nucMatrices.push(new THREE.Matrix4().compose(p, q, one));
     }
-    this.offset.add(this.core, this.dna);
+    this.nucCentres = Array.from({ length: N.count }, (_, i) => new THREE.Vector3().fromArray(N.pos, 3 * i));
+    this.lodAt = null;
+    this.assignLod(new THREE.Vector3());
+    this.offset.add(this.core, this.dna, this.coreLo, this.dnaLo);
     this.fade(mCore); this.fade(mDna);
     this.pickables.push({ hit: spheresHit(N.pos, 5.5), label: 'Nucleosome: 147 base pairs of DNA wrapped 1.65 turns around eight histone proteins (structure from PDB 1KX5).' });
 
@@ -82,6 +88,20 @@ export class ChromatinLevel extends Level {
     this._a = new THREE.Vector3(); this._b = new THREE.Vector3();
   }
 
+  assignLod(centre) {
+    const NEAR = 40;
+    const order = this.nucCentres.map((c, i) => [c.distanceToSquared(centre), i]).sort((x, y) => x[0] - y[0]);
+    let h = 0, l = 0;
+    order.forEach(([, i], k) => {
+      if (k < NEAR) { this.core.setMatrixAt(h, this.nucMatrices[i]); this.dna.setMatrixAt(h, this.nucMatrices[i]); h++; }
+      else { this.coreLo.setMatrixAt(l, this.nucMatrices[i]); this.dnaLo.setMatrixAt(l, this.nucMatrices[i]); l++; }
+    });
+    this.core.count = this.dna.count = h;
+    this.coreLo.count = this.dnaLo.count = l;
+    for (const im of [this.core, this.dna, this.coreLo, this.dnaLo]) { im.instanceMatrix.needsUpdate = true; im.boundingSphere = null; }
+    this.lodAt = centre.clone();
+  }
+
   update(lt, ctx) {
     const w = this.weight;
     const f = (lt - SHOW[0]) / (SHOW[1] - SHOW[0]);
@@ -102,6 +122,7 @@ export class ChromatinLevel extends Level {
     if (f < 0) this._a.set(0, 0, 0);
     const g = smooth((lt - TO_SITE[0]) / (TO_SITE[1] - TO_SITE[0]));
     this.anchor.copy(this._a).lerp(this.site, g);
+    if (this.lodAt.distanceTo(this.anchor) > 8) this.assignLod(this.anchor); // re-sort when the particle has moved 8 nm
     this.callout.opacity = w * smooth((lt - 1) / 1.5);
   }
 }

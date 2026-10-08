@@ -19,7 +19,7 @@ os.makedirs(OUT, exist_ok=True)
 ISO = 1.25
 COUCH_TOP = float(sys.argv[1]) if len(sys.argv) > 1 else ISO - 0.103  # top surface of the couch (m above floor)
 BAKE_SIZE = 2048
-SAMPLES = 64
+SAMPLES = 128
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 scene = bpy.context.scene
@@ -192,6 +192,25 @@ mat0.name = "room_baked"
 for o in list(scene.objects):
     if o.type == "LIGHT":
         bpy.data.objects.remove(o)
+
+# alignment lasers: thin green lines on the walls and floor that cross at the isocentre height
+# (separate, unbaked object; the app draws it as pure emissive light)
+lasers = []
+lm = mat("laser", (0.2, 1.0, 0.45), 1.0, emit=((0.2, 1.0, 0.45), 4.0))
+for sx in (-1, 1):
+    x = sx * (W / 2 - 0.065)
+    lasers.append(box(f"laserH{sx}", (0.004, 0.006, D1 - D0 - 0.2), (x, ISO, (D0 + D1) / 2), lm))
+    lasers.append(box(f"laserV{sx}", (0.004, H - 0.2, 0.006), (x, H / 2, 0.0), lm))
+    lasers.append(box(f"laserEmit{sx}", (0.05, 0.12, 0.12), (x + sx * -0.03, ISO, 0.0), M["dark"]))
+lasers.append(box("laserBackV", (0.006, H - 0.2, 0.004), (0, H / 2, D0 + 0.065), lm))
+lasers.append(box("laserFloor", (0.006, 0.002, D1 - 0.3 - (-1.2)), (0, 0.003, (D1 - 0.3 + -1.2) / 2), lm))
+bpy.ops.object.select_all(action="DESELECT")
+for o in lasers:
+    o.select_set(True)
+bpy.context.view_layer.objects.active = lasers[0]
+bpy.ops.object.join()
+bpy.context.object.name = "lasers"
+
 bpy.ops.export_scene.gltf(filepath=os.path.join(OUT, "room.glb"), export_format="GLB", export_image_format="JPEG", export_jpeg_quality=86,
                           export_normals=False, export_texcoords=True, export_materials="EXPORT", use_selection=False, export_apply=True)
 print("room triangles:", sum(len(p.vertices) - 2 for p in room.data.polygons))

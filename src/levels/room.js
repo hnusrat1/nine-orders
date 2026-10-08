@@ -1,10 +1,10 @@
 // Level 1 — treatment room, 1 m. Units: metres, origin at the Compton point.
 import * as THREE from 'three';
 import { Level, sphereHit, meshHit } from '../level.js';
-import { Ribbons, GlowPoints, solidMaterial } from '../gfx.js';
+import { Ribbons, GlowPoints, solidMaterial, textSprite } from '../gfx.js';
 import { Batch, rng } from '../build.js';
 import { fmt } from '../data.js';
-import { smooth } from '../journey.js';
+import { smooth, levelScale } from '../journey.js';
 import { photonRemaining } from './shared.js';
 
 const N_PHOTONS = 240;
@@ -28,8 +28,12 @@ export class RoomLevel extends Level {
       m.position.set(iso.x, floorY, iso.z);
       m.traverse((o) => {
         if (!o.isMesh) return;
-        const mat = new THREE.MeshBasicMaterial({ map: o.material.map, toneMapped: false });
-        mat.alphaHash = true;
+        if (/laser/i.test(o.name)) { // alignment lasers: pure emissive light
+          const lm = new THREE.MeshBasicMaterial({ color: 0x22c95e, toneMapped: false, transparent: true });
+          o.material = lm; this.fade(lm); return;
+        }
+        const mat = new THREE.MeshBasicMaterial({ map: o.material.map, color: 0xc4c4c4, toneMapped: false });
+        mat.transparent = true;
         o.material = mat;
         this.fade(mat);
       });
@@ -107,9 +111,31 @@ export class RoomLevel extends Level {
     const E0 = fmt(data.n.photonE0);
     this.pickables.push({ id: 'photon', hit: (ray) => sphereHit(this.photonPos, 0.14)(ray), label: `This photon: ${E0}, drawn from a published 6 MV spectrum.` });
     this.selected = false;
+
+    // "this one": a pulsing ring and a prompt around the photon while we wait for the viewer
+    this.ring = new THREE.Mesh(new THREE.RingGeometry(0.036, 0.041, 48), new THREE.MeshBasicMaterial({ color: 0xffc070, transparent: true, depthTest: false, depthWrite: false, toneMapped: false }));
+    this.ring.userData.billboard = true;
+    this.ring.renderOrder = 12;
+    this.prompt = textSprite('Pick this photon', { size: 0.032, color: '#ffd9a8', font: 500 });
+    this.prompt.material.depthTest = false;
+    this.prompt.userData.billboard = true;
+    this.prompt.renderOrder = 12;
+    this.ui.add(this.ring, this.prompt);
   }
 
   update(lt, ctx) {
+    const waiting = !ctx.selected && lt > 10.5;
+    const ws = levelScale(this.unit, ctx.z ?? 0);
+    const pd = this.photonPos.clone().sub(this.anchorShown || this.anchor).multiplyScalar(ws);
+    const ringPulse = 1 + 0.18 * Math.sin((ctx.time || 0) * 4);
+    this.ring.position.copy(pd);
+    this.ring.scale.setScalar(ringPulse);
+    this.ring.material.opacity = waiting ? this.weight * smooth((lt - 10.5) / 1.5) : 0;
+    this.ring.visible = this.ring.material.opacity > 0.01;
+    this.prompt.position.copy(pd).add(new THREE.Vector3(0, 0.075, 0));
+    this.prompt.material.opacity = this.ring.material.opacity;
+    this.prompt.visible = this.ring.visible;
+
     // Beam on 0–5 s, slows 5–11 s, stopped after 11 s.
     const speed = 1.6 * (1 - smooth((lt - 5) / 6));
     const dt = Math.min(ctx.dt, 0.05);

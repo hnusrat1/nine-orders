@@ -29,9 +29,12 @@ export class LogStrip {
     return this.mesh;
   }
   draw(z, levelId) {
-    const key = z.toFixed(3) + levelId;
+    const key = z.toFixed(2) + levelId;
     if (key === this.last) return;
-    this.last = key;
+    // a texture upload per frame stutters in VR: redraw at most ~8 times a second unless the stage changed
+    const now = performance.now();
+    if (this.lastLevel === levelId && now - (this.lastT || 0) < 120) return;
+    this.last = key; this.lastLevel = levelId; this.lastT = now;
     const c = this.ctx, W = this.canvas.width, H = this.canvas.height;
     c.clearRect(0, 0, W, H);
     c.fillStyle = 'rgba(5,7,10,0.55)';
@@ -119,7 +122,9 @@ export class Callout {
   set(title, rows, accent = ACC) {
     const key = title + '|' + rows.map((r) => [].concat(r).join('¦')).join('|');
     if (key === this.key) return;
-    this.key = key;
+    const now = performance.now();
+    if (this.key && title === this.title && now - (this.t || 0) < 250) return; // live values: at most 4 redraws/s
+    this.key = key; this.title = title; this.t = now;
     const c = this.canvas.getContext('2d'), W = this.canvas.width, H = this.canvas.height;
     c.clearRect(0, 0, W, H);
     c.fillStyle = 'rgba(5,7,10,0.72)'; roundRect(c, 2, 2, W - 4, H - 4, 14); c.fill();

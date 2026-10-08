@@ -18,13 +18,13 @@ About four minutes in Guided mode. Each stage shows a scale bar in real units an
 
 ## Controls
 
-| | Zoom | Look | Pause and label | Other |
-|---|---|---|---|---|
-| VR (Quest) | left stick forward/back (either stick works) | your head | trigger: pause and label what you point at; trigger again to continue | grip: grab and rotate; A/X: Guided ↔ Explore; B/Y: mute narration |
-| Desktop | scroll wheel, or W/S | drag to orbit | click | Space pause, G/E mode, M mute, Esc menu |
-| Phone | pinch | drag to orbit | tap | |
+| | Zoom through the scales | Move | Look | Pause and label | Other |
+|---|---|---|---|---|---|
+| VR (Quest) | right stick up/down | left stick walks; grip grabs the scene to move or turn it | your head; right stick left/right snap-turns 30° | trigger on anything; again to continue | B/Y menu (mode, narration, recenter, restart, exit); A/X Guided ↔ Explore |
+| Desktop | scroll, or `+` / `−` | `W` `A` `S` `D` fly, `Q` `E` down/up, right-drag (or Shift-drag) pans, `F` recenters | drag | click | Space pause, `G` mode, `N` narration, `H` controls, Esc menu; stage bar jumps between stages |
+| Phone | pinch | two-finger drag pans | one-finger drag | tap | toolbar: pause, recenter, controls |
 
-In **Guided** mode the journey plays by itself and zooming scrubs along it. In **Explore** mode you stop at any scale and each scale's story replays while you are there. Narration uses the browser's speech synthesis; subtitles are always on.
+In **Guided** mode the journey plays by itself and zooming scrubs along it. In **Explore** mode you stop at any scale and each scale's story replays while you are there. On entering VR a welcome panel shows the controls; labels on the controllers repeat them for the first half minute. Narration uses the browser's speech synthesis; subtitles are always on.
 
 ## Run locally
 
@@ -67,7 +67,7 @@ python3 sim/check_physics.py # recompute every on-screen number from the data fi
 cd tests && npm install
 ./run-all.sh           # all three below; required before every push
 node run-desktop.mjs   # Playwright, headless Chromium: all stages, screenshots in tests/screenshots/, fails on console errors or >150 draw calls
-node run-xr.mjs        # Meta IWER (Quest 3 emulation): Enter VR, trigger selects the photon, Guided end to end, stick scrub, Explore toggle, trigger labels, grip rotate; logs frame times
+node run-xr.mjs        # Meta IWER (Quest 3 emulation): welcome panel, trigger selects the photon, Guided end to end, stick zoom/scrub, walking, snap turn, menu buttons, trigger labels, grip grab; logs frame times
 python3 ../sim/check_physics.py
 ```
 
@@ -77,6 +77,8 @@ The IWER test page is generated in memory by `run-xr.mjs` and never exists as a 
 
 - three.js r170 is vendored in `vendor/three/` and loaded with an import map; nothing is fetched from a CDN at runtime.
 - Each scale is its own scene in its own units with the particle at the origin. Zoom is one exponent; each level renders only inside its own window and cross-fades with its neighbours, so no coordinate handed to the GPU spans more than about two orders of magnitude.
-- Cells, nucleosomes, atoms, track segments and interaction points are instanced (one draw call each). Models use meshopt compression. Fixed foveation is set to 0.2 in VR.
+- Cells, nucleosomes, atoms, bonds, track segments and interaction points are instanced (one draw call each); nucleosomes have two levels of detail. Models use meshopt compression. Fixed foveation is set to 0.2 in VR.
+- Desktop and phone render through a light bloom pass; VR renders directly. Image-based lighting comes from three.js's RoomEnvironment.
+- The view follows the particle with critically damped smoothing, so the camera never transmits the nanometre zig-zags of the electron track.
 
 Sources, licences and citations: [CREDITS.md](CREDITS.md).

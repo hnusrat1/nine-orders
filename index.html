@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Nine Orders</title>
-<meta name="description" content="Follow one 6 MV radiotherapy photon from the linac to a DNA double-strand break, across nine orders of magnitude.">
+<meta name="description" content="Follow one 6 MV radiotherapy photon from the linac to a DNA double-strand break, across nine orders of magnitude. Every track comes from Monte Carlo simulation.">
 <meta name="theme-color" content="#05070a">
 <link rel="stylesheet" href="css/style.css">
 <script type="importmap">
@@ -21,42 +21,84 @@
 
 <div id="hud" hidden>
   <canvas id="logstrip" width="220" height="640" aria-label="Scale position from one metre to one nanometre"></canvas>
+  <div id="stage-title" aria-live="polite"><span class="num"></span><span class="name"></span><span class="scale"></span></div>
   <div id="subtitles" role="status" aria-live="polite"></div>
+  <nav id="progress" aria-label="Stages"></nav>
   <div id="label" hidden></div>
   <div id="hint"></div>
   <div id="vignette"></div>
-  <button id="menu-btn" type="button" aria-label="Open menu">Menu</button>
+  <div id="toolbar">
+    <button type="button" id="tb-pause" title="Pause / play (Space)" aria-label="Pause">❚❚</button>
+    <button type="button" id="tb-mode" title="Guided or Explore (G)">Guided</button>
+    <button type="button" id="tb-recenter" title="Back to the particle (F)">Recenter</button>
+    <button type="button" id="tb-voice" title="Narration on/off (N)">Voice on</button>
+    <button type="button" id="tb-help" title="Controls (H)" aria-label="Controls">?</button>
+    <button type="button" id="tb-menu" title="Menu (Esc)">Menu</button>
+  </div>
+  <aside id="controls-card" hidden>
+    <h3>How to move</h3>
+    <div class="ctl-desktop">
+      <p><kbd>Scroll</kbd> or <kbd>+</kbd> <kbd>−</kbd> zoom through the nine orders of magnitude</p>
+      <p><kbd>Drag</kbd> look around the particle · <kbd>Right-drag</kbd> or <kbd>Shift</kbd>+drag pan</p>
+      <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> fly · <kbd>Q</kbd><kbd>E</kbd> down / up · <kbd>F</kbd> back to the particle</p>
+      <p><kbd>Click</kbd> anything to pause and read what it is · <kbd>Space</kbd> pause · <kbd>G</kbd> Guided / Explore</p>
+    </div>
+    <div class="ctl-touch">
+      <p><b>Pinch</b> zoom through the scales · <b>one finger</b> look around · <b>two fingers</b> pan</p>
+      <p><b>Tap</b> anything to pause and read what it is</p>
+    </div>
+    <p class="small">In <b>Guided</b> mode the story plays itself and zooming moves you along it. In <b>Explore</b> you stop at any scale.</p>
+    <button type="button" id="controls-close">Got it</button>
+  </aside>
 </div>
 
 <div id="menu">
-  <div class="panel">
-    <h1>Nine Orders</h1>
-    <p class="lede">One 6&nbsp;MV radiotherapy photon, followed from the linear accelerator to a break in DNA. One continuous zoom from 1&nbsp;m to 1&nbsp;nm.</p>
-    <div class="row buttons">
-      <button id="btn-vr" type="button" hidden>Enter VR</button>
-      <button id="btn-start" type="button">Start</button>
+  <div class="panel intro">
+    <div class="intro-text">
+      <h1>Nine Orders</h1>
+      <p class="lede">Follow one photon from a radiotherapy machine to a break in the DNA of a tumour cell: one continuous zoom from 1&nbsp;metre to 1&nbsp;nanometre, nine orders of magnitude.</p>
+      <h2>This is a simulation, not an animation</h2>
+      <div id="intro-facts"><p class="small">Loading the simulation data…</p></div>
+      <p class="small">Every number you see is computed from those runs and listed, with how it was obtained, under <button id="btn-about" type="button" class="link">About the physics and sources</button>.</p>
     </div>
-    <div class="row">
-      <span class="lbl">Mode</span>
-      <div class="seg" role="radiogroup" aria-label="Mode">
-        <button type="button" data-mode="guided" aria-pressed="true">Guided</button>
-        <button type="button" data-mode="explore" aria-pressed="false">Explore</button>
+    <div class="intro-side">
+      <div class="row buttons">
+        <button id="btn-vr" type="button" hidden>Enter VR</button>
+        <button id="btn-start" type="button">Start</button>
       </div>
-    </div>
-    <div class="row">
-      <span class="lbl">Narration</span>
-      <div class="seg" role="radiogroup" aria-label="Narration">
-        <button type="button" data-voice="on" aria-pressed="true">On</button>
-        <button type="button" data-voice="off" aria-pressed="false">Muted</button>
+      <div class="row">
+        <span class="lbl">Mode</span>
+        <div class="seg" role="radiogroup" aria-label="Mode">
+          <button type="button" data-mode="guided" aria-pressed="true">Guided</button>
+          <button type="button" data-mode="explore" aria-pressed="false">Explore</button>
+        </div>
       </div>
+      <p class="small mode-help"><b>Guided</b> plays the 4-minute story with narration. <b>Explore</b> lets you zoom and stop anywhere.</p>
+      <div class="row">
+        <span class="lbl">Narration</span>
+        <div class="seg" role="radiogroup" aria-label="Narration">
+          <button type="button" data-voice="on" aria-pressed="true">On</button>
+          <button type="button" data-voice="off" aria-pressed="false">Muted</button>
+        </div>
+      </div>
+      <div class="howto">
+        <h3>How to move</h3>
+        <div class="ctl-desktop">
+          <p><kbd>Scroll</kbd> zoom through the scales</p>
+          <p><kbd>Drag</kbd> look · <kbd>Right-drag</kbd> pan</p>
+          <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> fly · <kbd>F</kbd> back to the particle</p>
+          <p><kbd>Click</kbd> to pause and label anything</p>
+        </div>
+        <div class="ctl-touch">
+          <p><b>Pinch</b> zoom · <b>drag</b> look · <b>two fingers</b> pan</p>
+          <p><b>Tap</b> to pause and label anything</p>
+        </div>
+        <div class="ctl-vr">
+          <p><b>VR</b>: left stick move · right stick zoom (up/down) and turn (left/right) · trigger select · grip grab and move the scene · <b>B/Y</b> menu</p>
+        </div>
+      </div>
+      <p id="status" class="small"></p>
     </div>
-    <div class="row"><button id="btn-about" type="button" class="link">About the physics and sources</button></div>
-    <p id="status" class="small"></p>
-    <p class="small controls-help">
-      <b>Desktop</b>: scroll or W/S to zoom, drag to orbit, click to pause and label.<br>
-      <b>Phone</b>: pinch to zoom, drag to orbit, tap to pause.<br>
-      <b>VR</b>: stick forward/back to zoom, trigger to pause and label, grip to grab and rotate, A/X switches Guided/Explore, B/Y mutes narration.
-    </p>
   </div>
 </div>
 

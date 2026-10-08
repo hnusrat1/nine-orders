@@ -22,28 +22,50 @@ export class DnaLevel extends Level {
     const cut = { [pair[0].strand]: pair[0].bp, [pair[1].strand]: pair[1].bp };
     const sides = [[], []];
     for (let i = 0; i < A.count; i++) sides[A.bp[i] <= cut[A.strand[i]] ? 0 : 1].push(i);
-    const geo = new THREE.SphereGeometry(1, 10, 7);
-    const mat = new THREE.MeshStandardMaterial({ roughness: 0.42, metalness: 0.05 });
-    mat.alphaHash = true;
-    this.fade(mat);
-    const col = new THREE.Color();
-    const cBack = [new THREE.Color(0xe0a860), new THREE.Color(0x6fa8dc)];
-    const cBase = [new THREE.Color(0xb8b0a4), new THREE.Color(0xa4b0b8)];
-    const cP = new THREE.Color(0xffd27a), cO = new THREE.Color(0xe06a5a), cN = new THREE.Color(0x7a8cff);
+    // Ball-and-stick: atoms at 0.4 × their van der Waals radius, bonds wherever two
+    // heavy atoms are closer than 0.19 nm (covalent bond lengths are 0.13–0.16 nm).
+    const geo = new THREE.SphereGeometry(1, 12, 8);
+    const bondGeo = new THREE.CylinderGeometry(1, 1, 1, 8, 1, true);
+    const mat = new THREE.MeshStandardMaterial({ roughness: 0.38, metalness: 0.05, envMapIntensity: 0.7, transparent: true });
+    const bondMat = new THREE.MeshStandardMaterial({ roughness: 0.45, metalness: 0.0, envMapIntensity: 0.9, transparent: true });
+    this.fade(mat); this.fade(bondMat);
+    const cBack = [new THREE.Color(0xd9893a), new THREE.Color(0x3f86d1)];
+    const cBase = [new THREE.Color(0xa89d8e), new THREE.Color(0x8f9aa8)];
+    const cP = new THREE.Color(0xffd06a), cO = new THREE.Color(0xff6f5c), cN = new THREE.Color(0x7d8cff);
+    const colourOf = (i) => {
+      const st = A.strand[i], e = A.elem[i];
+      if (A.backbone[i]) return e === 3 ? cP : e === 2 ? cBack[st].clone().lerp(cO, 0.35) : cBack[st];
+      return cBase[st].clone().lerp(e === 2 ? cO : e === 1 ? cN : cBase[st], 0.45);
+    };
+    const P = (i) => new THREE.Vector3(A.pos[3 * i], A.pos[3 * i + 1], A.pos[3 * i + 2]);
     this.halves = sides.map((list) => {
       const im = new THREE.InstancedMesh(geo, mat, list.length);
       const m = new THREE.Matrix4();
       list.forEach((i, j) => {
-        const r = VDW[A.elem[i]] * 0.62;
+        const r = VDW[A.elem[i]] * 0.4;
         m.makeScale(r, r, r).setPosition(A.pos[3 * i], A.pos[3 * i + 1], A.pos[3 * i + 2]);
         im.setMatrixAt(j, m);
-        const s = A.strand[i], e = A.elem[i];
-        if (A.backbone[i]) col.copy(e === 3 ? cP : cBack[s]);
-        else col.copy(cBase[s]).lerp(e === 2 ? cO : e === 1 ? cN : cBase[s], 0.35);
-        im.setColorAt(j, col);
+        im.setColorAt(j, colourOf(i));
       });
+      // bonds within this half
+      const bonds = [];
+      for (let a = 0; a < list.length; a++) for (let b = a + 1; b < list.length; b++) {
+        const i = list[a], k = list[b];
+        const dx = A.pos[3 * i] - A.pos[3 * k], dy = A.pos[3 * i + 1] - A.pos[3 * k + 1], dz = A.pos[3 * i + 2] - A.pos[3 * k + 2];
+        if (dx * dx + dy * dy + dz * dz < 0.0361) bonds.push([i, k]);
+      }
+      const bm = new THREE.InstancedMesh(bondGeo, bondMat, Math.max(bonds.length, 1));
+      const up = new THREE.Vector3(0, 1, 0), q = new THREE.Quaternion(), c = new THREE.Color();
+      bonds.forEach(([i, k], j) => {
+        const a = P(i), b = P(k), d = b.clone().sub(a);
+        q.setFromUnitVectors(up, d.clone().normalize());
+        m.compose(a.clone().add(b).multiplyScalar(0.5), q, new THREE.Vector3(0.022, d.length(), 0.022));
+        bm.setMatrixAt(j, m);
+        bm.setColorAt(j, c.copy(colourOf(i)).lerp(colourOf(k), 0.5).multiplyScalar(0.8));
+      });
+      bm.count = bonds.length;
       const g = new THREE.Group();
-      g.add(im);
+      g.add(im, bm);
       this.offset.add(g);
       return g;
     });

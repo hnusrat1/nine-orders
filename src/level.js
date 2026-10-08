@@ -16,7 +16,9 @@ export class Level {
     this.root.visible = false;
     this.ui = new THREE.Group();       // display-metre UI that sits at the anchor (callouts)
     this.ui.name = def.id + '-ui';
-    this.anchor = new THREE.Vector3(); // anchor in level-local units
+    this.anchor = new THREE.Vector3(); // anchor in level-local units (where the story says the particle is)
+    this.anchorShown = null;           // smoothed anchor actually used for display
+    this.smoothTau = def.smoothTau ?? 0.35; // s; follows the particle without transmitting every zig-zag
     this.faders = [];                  // {set(o)} objects
     this.pickables = [];               // {hit(rayLocal) -> distance|null, label()}
     this.weight = 0;
@@ -35,7 +37,7 @@ export class Level {
 
   computeWeight(z) { return levelWeight(this.range, z); }
 
-  apply(z, anchorWorld, userQuat, w) {
+  apply(z, anchorWorld, userQuat, w, dt = 0) {
     this.weight = w;
     this.root.visible = w > 0.002;
     this.ui.visible = w > 0.3;
@@ -44,8 +46,16 @@ export class Level {
     this.ui.quaternion.copy(userQuat);
     this.root.position.copy(anchorWorld);
     this.root.quaternion.copy(userQuat);
-    this.root.scale.setScalar(levelScale(this.unit, z));
-    this.offset.position.copy(this.anchor).multiplyScalar(-1);
+    const s = levelScale(this.unit, z);
+    this.root.scale.setScalar(s);
+    // Critically damped follow of the particle. Large jumps (scrubbing, mode
+    // switches) snap so the view never drifts for long.
+    if (!this.anchorShown || dt <= 0 || this.anchorShown.distanceTo(this.anchor) * s > 0.25) {
+      this.anchorShown = (this.anchorShown || new THREE.Vector3()).copy(this.anchor);
+    } else {
+      this.anchorShown.lerp(this.anchor, 1 - Math.exp(-dt / this.smoothTau));
+    }
+    this.offset.position.copy(this.anchorShown).multiplyScalar(-1);
     for (const f of this.faders) f(w);
   }
 

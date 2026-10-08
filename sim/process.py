@@ -222,6 +222,12 @@ def main():
         "tracksPerNucleus2Gy": num(tracks_2Gy, "", "Electron tracks through one nucleus in 2 Gy",
                                    f"Fluence of photon-set-in-motion electrons per Gy in a {flu['radius_mm']:.0f} mm sphere in the prostate (Geant4, {flu['events']:,} photons) × 2 Gy × π({NUCLEUS_D_UM / 2:g} µm)²", 2),
     }
+    sr = story_run()
+    n["storyPhotons"] = num(sr["photons"], "", "Photons simulated in the patient-scale story run", "/run/beamOn in sim/macros/patient_story.mac", 6)
+    n["storyEvents"] = num(sr["qualifying_events"], "", "Photons whose first interaction was a Compton scatter in the prostate (0.3–1.0 MeV electron)", "Events written by the story run", 4)
+    n["deltaHistories"] = num(dsb["n_histories"], "", "Geant4-DNA histories of the delta electron", "Histories in the option4 run", 4)
+    n["placements"] = num(dsb["trials"], "", "Placements of delta tracks in the chromatin model", "histories × rotations", 5)
+    n["fluencePhotons"] = num(flu["events"], "", "Photons in the dose/fluence run", "/run/beamOn in sim/macros/patient_fluence.mac", 7)
     for i, s in enumerate(ssb_list):
         if i in pair_idx:
             key = "ssbA_eV" if s["strand"] == 0 else "ssbB_eV"
@@ -269,6 +275,7 @@ def main():
             "dsbSearch": {k: dsb[k] for k in ("trials", "trials_with_ssb", "trials_with_dsb", "n_histories", "n_rotations", "n_nucleosomes", "n_linkers", "region_radius_nm", "density_per_nm3")},
             "linkerLengths_bp": [int(x) for x in ch["lk_n"]],
             "dna": runs,
+            "story": story_run(),
         },
         "eventTypes": {"0": "elastic scattering", "1": "electronic excitation", "2": "ionisation", "3": "vibrational excitation", "4": "dissociative attachment",
                        "5": "thermalisation (solvation)", "6": "track start", "10": "condensed-history step (eIoni)", "11": "condensed-history step (msc / transport)", "12": "bremsstrahlung"},
@@ -281,6 +288,15 @@ def main():
     print("wrote", OUT, {k: v["count"] for k, v in datasets.items()}, f"{total / 1024:.0f} KiB")
     for k, v in n.items():
         print(f"  {k:20s} {v['value']:.5g} {v['unit']}")
+
+
+def story_run():
+    """Photons fired in the patient-scale story run and how many qualified."""
+    mac = open(os.path.join(HERE, "macros", "patient_story.mac")).read()
+    photons = int([l.split()[1] for l in mac.splitlines() if l.startswith("/run/beamOn")][-1])
+    events = sum(1 for l in open(os.path.join(W, "runs", "patient_story.txt")) if l.startswith("E "))
+    return {"photons": photons, "qualifying_events": events,
+            "criteria": "first real interaction a Compton scatter within 15 mm of the isocentre, recoil electron 0.3–1.0 MeV"}
 
 
 def notes(n, dsb, runs, flu, segs):

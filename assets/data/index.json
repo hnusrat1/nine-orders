@@ -893,6 +893,41 @@
    "derivation": "Fluence of photon-set-in-motion electrons per Gy in a 10 mm sphere in the prostate (Geant4, 4,000,000 photons) × 2 Gy × π(4.5 µm)²",
    "digits": 2
   },
+  "storyPhotons": {
+   "value": 100000.0,
+   "unit": "",
+   "label": "Photons simulated in the patient-scale story run",
+   "derivation": "/run/beamOn in sim/macros/patient_story.mac",
+   "digits": 6
+  },
+  "storyEvents": {
+   "value": 149.0,
+   "unit": "",
+   "label": "Photons whose first interaction was a Compton scatter in the prostate (0.3–1.0 MeV electron)",
+   "derivation": "Events written by the story run",
+   "digits": 4
+  },
+  "deltaHistories": {
+   "value": 1000.0,
+   "unit": "",
+   "label": "Geant4-DNA histories of the delta electron",
+   "derivation": "Histories in the option4 run",
+   "digits": 4
+  },
+  "placements": {
+   "value": 24000.0,
+   "unit": "",
+   "label": "Placements of delta tracks in the chromatin model",
+   "derivation": "histories × rotations",
+   "digits": 5
+  },
+  "fluencePhotons": {
+   "value": 4000000.0,
+   "unit": "",
+   "label": "Photons in the dose/fluence run",
+   "derivation": "/run/beamOn in sim/macros/patient_fluence.mac",
+   "digits": 7
+  },
   "ssbA_eV": {
    "value": 45.84,
    "unit": "eV",
@@ -6670,6 +6705,11 @@
    "primary_E_handoff_keV": 890.253288,
    "primary_E_start_keV": 892.6946499791667,
    "calib_loss_keV": 2.4413619791666665
+  },
+  "story": {
+   "photons": 100000,
+   "qualifying_events": 149,
+   "criteria": "first real interaction a Compton scatter within 15 mm of the isocentre, recoil electron 0.3–1.0 MeV"
   }
  },
  "eventTypes": {

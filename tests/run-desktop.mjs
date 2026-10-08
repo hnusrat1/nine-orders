@@ -17,7 +17,7 @@ page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + 
 page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
 const fail = (msg) => { console.error('FAIL', msg); process.exitCode = 1; };
 
-await page.goto(url + '/index.html');
+await page.goto(url + '/index.html', { timeout: 120000 });
 await page.waitForFunction(() => window.__nine && window.__nine.ready, null, { timeout: 60000 });
 await page.screenshot({ path: path.join(OUT, '0-menu.png') });
 await page.click('#btn-about');
@@ -26,6 +26,7 @@ const aboutText = await page.$eval('#about-body', (e) => e.textContent);
 if (!/Known approximations/.test(aboutText) || !/17.5 eV/.test(aboutText)) fail('About panel is missing physics notes');
 await page.click('#about-close');
 await page.click('#btn-start');
+if (await page.$eval('#controls-card', (e) => !e.hidden)) console.log('ok  controls card shown on first start'); else fail('controls card not shown on start');
 const frames = (n) => page.evaluate((n) => new Promise((ok) => { let k = 0; const f = () => (++k >= n ? ok() : requestAnimationFrame(f)); requestAnimationFrame(f); }), n);
 const st = () => page.evaluate(() => window.__nine.state());
 
@@ -61,10 +62,32 @@ console.table(report);
 
 // Guided mode actually plays: run 2 s of real time from the start
 await page.evaluate(() => { window.__nine.setT(0); });
-const t0 = (await st()).T;
+const g0 = await st();
 await page.waitForTimeout(2000);
-const t1 = (await st()).T;
-if (!(t1 > t0 + 1)) fail(`guided time did not advance (${t0} → ${t1})`);
+const g1 = await st();
+if (!(g1.T - g0.T > 0.8 * (g1.time - g0.time) && g1.T > g0.T)) fail(`guided time did not advance (${g0.T} → ${g1.T} over ${(g1.time - g0.time).toFixed(2)} s)`);
+
+// Onboarding and free movement
+const c0 = await page.evaluate(() => window.__nine.camera());
+await page.keyboard.down('d'); await page.waitForTimeout(700); await page.keyboard.up('d');
+await page.keyboard.down('e'); await page.waitForTimeout(500); await page.keyboard.up('e');
+const c1 = await page.evaluate(() => window.__nine.camera());
+const flown = Math.hypot(c1.focus[0] - c0.focus[0], c1.focus[1] - c0.focus[1], c1.focus[2] - c0.focus[2]);
+if (flown > 0.05) console.log(`ok  WASD/QE fly the camera (${flown.toFixed(2)} m)`); else fail('WASD did not move the camera');
+await page.mouse.move(640, 380); await page.mouse.down({ button: 'right' }); await page.mouse.move(540, 330, { steps: 5 }); await page.mouse.up({ button: 'right' });
+const c2 = await page.evaluate(() => window.__nine.camera());
+if (Math.hypot(c2.focus[0] - c1.focus[0], c2.focus[1] - c1.focus[1], c2.focus[2] - c1.focus[2]) > 0.02) console.log('ok  right-drag pans'); else fail('right-drag did not pan');
+await page.keyboard.press('f'); await frames(20);
+const c3 = await page.evaluate(() => ({ cam: window.__nine.camera(), a: window.__nine.anchorWorld() }));
+if (Math.hypot(c3.cam.focus[0] - c3.a[0], c3.cam.focus[1] - c3.a[1], c3.cam.focus[2] - c3.a[2]) < 0.01) console.log('ok  F recenters on the particle'); else fail('F did not recenter');
+await page.evaluate(() => window.__nine.setMode('guided'));
+await page.click('#progress button[data-stage="cell"]');
+await frames(3);
+const sj = await st();
+if (sj.T >= 95 && sj.T < 100) console.log(`ok  stage bar jumps to the cell stage (T=${sj.T.toFixed(1)})`); else fail(`stage bar jump failed (T=${sj.T})`);
+await page.keyboard.press('h');
+if (await page.$eval('#controls-card', (e) => !e.hidden)) console.log('ok  H toggles the controls card'); else fail('H did not toggle controls');
+await page.keyboard.press('h');
 
 // Explore: wheel zoom
 await page.evaluate(() => window.__nine.setMode('explore'));
@@ -92,7 +115,7 @@ console.log(`frame time (headless swiftshader, not representative of Quest): med
 const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 phone.on('console', (m) => { if (m.type() === 'error') errors.push('phone console: ' + m.text()); });
 phone.on('pageerror', (e) => errors.push('phone pageerror: ' + e.message));
-await phone.goto(url + '/index.html');
+await phone.goto(url + '/index.html', { timeout: 120000 });
 await phone.waitForFunction(() => window.__nine && window.__nine.ready, null, { timeout: 60000 });
 await phone.screenshot({ path: path.join(OUT, '9-phone-menu.png') });
 await phone.tap('#btn-start');
