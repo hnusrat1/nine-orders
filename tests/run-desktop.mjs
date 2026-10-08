@@ -19,6 +19,12 @@ const fail = (msg) => { console.error('FAIL', msg); process.exitCode = 1; };
 
 await page.goto(url + '/index.html');
 await page.waitForFunction(() => window.__nine && window.__nine.ready, null, { timeout: 60000 });
+await page.screenshot({ path: path.join(OUT, '0-menu.png') });
+await page.click('#btn-about');
+await page.screenshot({ path: path.join(OUT, '0-about.png') });
+const aboutText = await page.$eval('#about-body', (e) => e.textContent);
+if (!/Known approximations/.test(aboutText) || !/17.5 eV/.test(aboutText)) fail('About panel is missing physics notes');
+await page.click('#about-close');
 await page.click('#btn-start');
 const frames = (n) => page.evaluate((n) => new Promise((ok) => { let k = 0; const f = () => (++k >= n ? ok() : requestAnimationFrame(f)); requestAnimationFrame(f); }), n);
 const st = () => page.evaluate(() => window.__nine.state());
@@ -81,6 +87,34 @@ console.log('ok  click pauses; label:', lbl.slice(0, 90));
 const ft = await page.evaluate(() => window.__nine.frameTimes.slice(-120));
 ft.sort((a, b) => a - b);
 console.log(`frame time (headless swiftshader, not representative of Quest): median ${ft[60].toFixed(1)} ms`);
+
+// Phone: touch viewport, tap to start, pinch to zoom (two synthetic touch pointers), tap to pause
+const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+phone.on('console', (m) => { if (m.type() === 'error') errors.push('phone console: ' + m.text()); });
+phone.on('pageerror', (e) => errors.push('phone pageerror: ' + e.message));
+await phone.goto(url + '/index.html');
+await phone.waitForFunction(() => window.__nine && window.__nine.ready, null, { timeout: 60000 });
+await phone.screenshot({ path: path.join(OUT, '9-phone-menu.png') });
+await phone.tap('#btn-start');
+await phone.evaluate(() => { window.__nine.setMode('explore'); window.__nine.setZ(4.8); });
+await phone.waitForTimeout(300);
+const pz0 = await phone.evaluate(() => window.__nine.state().z);
+await phone.evaluate(async () => {
+  const c = document.querySelector('#app canvas');
+  const ev = (type, id, x, y) => c.dispatchEvent(new PointerEvent(type, { pointerId: id, pointerType: 'touch', clientX: x, clientY: y, bubbles: true, isPrimary: id === 1 }));
+  ev('pointerdown', 1, 170, 420); ev('pointerdown', 2, 220, 420);
+  for (let k = 1; k <= 10; k++) { ev('pointermove', 1, 170 - k * 10, 420); ev('pointermove', 2, 220 + k * 10, 420); await new Promise((r) => setTimeout(r, 16)); }
+  ev('pointerup', 1, 70, 420); ev('pointerup', 2, 320, 420);
+});
+await phone.waitForTimeout(200);
+const pz1 = await phone.evaluate(() => window.__nine.state().z);
+if (pz1 > pz0 + 0.3) console.log(`ok  pinch zooms on a phone (z ${pz0.toFixed(2)} → ${pz1.toFixed(2)})`); else fail(`pinch did not zoom (z ${pz0} → ${pz1})`);
+await phone.tap('#app canvas', { position: { x: 195, y: 420 } });
+await phone.waitForTimeout(200);
+if ((await phone.evaluate(() => window.__nine.state().paused))) console.log('ok  tap pauses on a phone'); else fail('tap did not pause on a phone');
+await phone.screenshot({ path: path.join(OUT, '9-phone-cell.png') });
+const overflow = await phone.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+if (overflow) fail('horizontal overflow on phone');
 
 if (errors.length) { fail('console errors:\n' + errors.join('\n')); }
 await browser.close();

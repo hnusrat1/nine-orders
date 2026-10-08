@@ -214,7 +214,7 @@ const el = renderer.domElement;
 const pointers = new Map();
 let drag = null, pinch = null;
 el.addEventListener('pointerdown', (e) => {
-  el.setPointerCapture(e.pointerId);
+  try { el.setPointerCapture(e.pointerId); } catch { /* synthetic or already-released pointer */ }
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t0: performance.now() });
   if (pointers.size === 2) {
     const [a, b] = [...pointers.values()];
@@ -315,7 +315,11 @@ function pollXR(dt) {
       else scrub(v * 9 * dt);
     }
     if (edge(0)) activate(controllerRay(c), null);                    // trigger
-    if (edge(1)) c.userData.grab = { q0: c.quaternion.clone(), u0: userQuat.clone() }; // grip
+    if (edge(1)) {                                                     // grip: grab the photon, or grab and rotate
+      const room = levels[0];
+      if (!S.selected && room.weight > 0.5 && room.pick(controllerRay(c), 'photon')) { S.selected = true; S.paused = false; }
+      else c.userData.grab = { q0: c.quaternion.clone(), u0: userQuat.clone() };
+    }
     if (!pressed(1)) c.userData.grab = null;
     if (c.userData.grab) {
       const g = c.userData.grab;
@@ -335,15 +339,20 @@ function pollXR(dt) {
 
 // ------------------------------------------------------------------ VR furniture
 let vrPlaced = false, vignette;
+// Reading panels in VR follow the head lazily, by yaw only: they stay put until
+// you turn more than ~30°, then glide back in front. No roll, no pitch.
+const hudRig = new THREE.Group();
+const hudFollow = { yaw: null, height: null };
 function placeVR() {
   anchorWorld.copy(ANCHOR_VR);
-  const ls = logstrip.makeMesh(0.46);
-  ls.position.copy(ANCHOR_VR).add(new THREE.Vector3(-0.78, 0.05, 0.25));
-  ls.lookAt(0, 1.5, 0.3);
-  scene.add(ls);
-  subsPanel.mesh.position.copy(ANCHOR_VR).add(new THREE.Vector3(0, -0.4, 0.3));
-  subsPanel.mesh.lookAt(0, 1.55, 0.2);
-  scene.add(subsPanel.mesh);
+  const ls = logstrip.makeMesh(0.34);
+  ls.position.set(-0.62, 0.02, -1.05);
+  ls.rotation.y = Math.atan2(0.62, 1.05);
+  hudRig.add(ls);
+  subsPanel.mesh.position.set(0, -0.44, -1.05);
+  subsPanel.mesh.rotation.x = -0.38;
+  hudRig.add(subsPanel.mesh);
+  scene.add(hudRig);
   // head-locked edge vignette for fast zooms
   const vg = new THREE.RingGeometry(0.06, 0.6, 48, 1);
   vignette = new THREE.Mesh(vg, new THREE.ShaderMaterial({
@@ -358,7 +367,29 @@ function placeVR() {
   scene.add(camera);
   vrPlaced = true;
 }
-renderer.xr.addEventListener('sessionstart', () => { if (!vrPlaced) placeVR(); else anchorWorld.copy(ANCHOR_VR); });
+renderer.xr.addEventListener('sessionstart', () => { hudFollow.yaw = null; if (!vrPlaced) placeVR(); });
+
+function followHead(dt) {
+  if (!renderer.xr.isPresenting) return;
+  const xc = renderer.xr.getCamera();
+  const head = new THREE.Vector3().setFromMatrixPosition(xc.matrixWorld);
+  const fwd = new THREE.Vector3(0, 0, -1).transformDirection(xc.matrixWorld);
+  const yaw = Math.atan2(-fwd.x, -fwd.z);
+  if (hudFollow.yaw === null) {
+    // first VR frame: put the particle 0.9 m in front of the viewer, a little below eye level
+    hudFollow.yaw = yaw; hudFollow.height = head.y;
+    anchorWorld.set(head.x - Math.sin(yaw) * 0.9, Math.min(1.35, Math.max(0.8, head.y - 0.42)), head.z - Math.cos(yaw) * 0.9);
+  }
+  let d = yaw - hudFollow.yaw;
+  d = Math.atan2(Math.sin(d), Math.cos(d));
+  if (Math.abs(d) > 0.52 || hudFollow.moving) {
+    hudFollow.moving = Math.abs(d) > 0.05;
+    hudFollow.yaw += d * Math.min(1, dt * 2.5);
+  }
+  hudFollow.height += (head.y - hudFollow.height) * Math.min(1, dt * 1.5);
+  hudRig.position.set(head.x, hudFollow.height, head.z);
+  hudRig.rotation.set(0, hudFollow.yaw, 0);
+}
 renderer.xr.addEventListener('sessionend', () => { anchorWorld.copy(ANCHOR_DESKTOP); });
 
 // ------------------------------------------------------------------ frame
@@ -369,6 +400,7 @@ function step(dt) {
   const kz = (keys.has('w') || keys.has('arrowup') ? 1 : 0) - (keys.has('s') || keys.has('arrowdown') ? 1 : 0);
   if (kz) { if (S.mode === 'explore') S.z = Math.min(Z_MAX, Math.max(Z_MIN, S.z + kz * 0.6 * dt)); else scrub(kz * 8 * dt); }
   pollXR(dt);
+  followHead(dt);
 
   if (S.mode === 'guided') {
     if (S.started && !S.paused && !S.ended) {
@@ -405,10 +437,11 @@ function applyFrame(dt) {
 
   // camera (desktop/phone)
   if (!renderer.xr.isPresenting) {
+    const r = orbit.r * (camera.aspect < 1 ? 1 + 0.6 * (1 - camera.aspect) : 1); // portrait phones see less width
     camera.position.set(
-      anchorWorld.x + orbit.r * Math.sin(orbit.phi) * Math.sin(orbit.theta),
-      anchorWorld.y + orbit.r * Math.cos(orbit.phi),
-      anchorWorld.z + orbit.r * Math.sin(orbit.phi) * Math.cos(orbit.theta));
+      anchorWorld.x + r * Math.sin(orbit.phi) * Math.sin(orbit.theta),
+      anchorWorld.y + r * Math.cos(orbit.phi),
+      anchorWorld.z + r * Math.sin(orbit.phi) * Math.cos(orbit.theta));
     camera.lookAt(anchorWorld);
   }
   const view = renderer.xr.isPresenting ? renderer.xr.getCamera() : camera;

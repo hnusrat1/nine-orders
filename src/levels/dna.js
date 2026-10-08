@@ -84,11 +84,11 @@ export class DnaLevel extends Level {
     this.axis = new THREE.Vector3(...dsb.axis);
 
     this.legend = new Callout({ lines: 3, height: 0.216 });
-    this.legend.mesh.position.set(-0.62, 0.3, 0);
+    this.legend.mesh.position.set(-0.5, 0.3, 0);
     this.legend.set('Interaction types', [['●  orange', 'ionisation', '#ffa040'], ['●  blue', 'electronic excitation', '#5ab0ff'], ['●  red', 'strand break', '#ff5a4d']], '#e8edf2');
     this.ui.add(this.legend.mesh);
     this.callout = new Callout({ lines: 3, height: 0.216 });
-    this.callout.mesh.position.set(0.62, 0.3, 0);
+    this.callout.mesh.position.set(0.5, 0.3, 0);
     this.ui.add(this.callout.mesh);
     this.n = n;
   }

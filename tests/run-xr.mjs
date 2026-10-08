@@ -75,6 +75,15 @@ await wait(200);
 await press('right', 'trigger');
 if ((await st()).selected) ok('trigger on the glowing photon selects it'); else fail('trigger did not select the photon at ' + ph.map((v) => v.toFixed(3)));
 
+// VR views (both eyes as IWER draws them) for a layout check
+const OUT = path.join(ROOT, 'tests', 'screenshots');
+fs.mkdirSync(OUT, { recursive: true });
+for (const [name, T] of [['vr-1-room', 16], ['vr-2-patient', 50], ['vr-3-tissue', 85], ['vr-4-cell', 112], ['vr-5-chromatin', 150], ['vr-6-dna', 196]]) {
+  await page.evaluate((T) => window.__nine.setT(T), T);
+  await wait(700);
+  await page.screenshot({ path: path.join(OUT, name + '.png') });
+}
+
 // 2. Guided end to end at 10× speed
 await page.evaluate(() => { window.__nine.setT(0); window.__nine.setSpeed(10); });
 const t0 = Date.now();

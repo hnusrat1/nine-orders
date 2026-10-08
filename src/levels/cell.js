@@ -26,7 +26,7 @@ export class CellLevel extends Level {
     const nucMesh = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 5), fresnelMaterial({ color: 0x9d86e0, rim: 2.2, base: 0.03, strength: 1.0, side: THREE.DoubleSide }));
     nucMesh.position.copy(nc); nucMesh.scale.setScalar(cell.nucleusRadius_um);
     this.offset.add(nucMesh); this.fade(nucMesh.material);
-    this.pickables.push({ hit: sphereHit(nc, cell.nucleusRadius_um), label: `Cell nucleus, ${fmt(n.nucleusDiameter)} across: about two metres of DNA packed as chromatin.` });
+    this.pickables.push({ hit: sphereHit(nc, cell.nucleusRadius_um), label: `Cell nucleus, ${fmt(n.nucleusDiameter)} across (model), holding the cell's DNA packed as chromatin.` });
 
     // ---- chromatin domains: 46 chromosome territories as soft clusters
     const pts = [], col = [], sz = [];
