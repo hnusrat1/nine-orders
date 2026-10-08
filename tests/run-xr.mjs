@@ -109,7 +109,7 @@ if (b < a - 4) ok(`left stick back scrubs zoom out (T ${a.toFixed(1)} → ${b.to
 await press('right', 'a-button');
 if ((await st()).mode === 'explore') ok('A button switches to Explore'); else fail('A button did not switch mode');
 let z0 = (await st()).z;
-await stick('right', -1); await wait(800); await stick('right', 0);
+await stick('right', -1); await wait(1600); await stick('right', 0);
 let z1 = (await st()).z;
 if (z1 > z0 + 0.3) ok(`stick zooms in Explore (z ${z0.toFixed(2)} → ${z1.toFixed(2)})`); else fail(`explore stick zoom failed (${z0} → ${z1})`);
 

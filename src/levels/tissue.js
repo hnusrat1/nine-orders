@@ -58,7 +58,7 @@ export class TissueLevel extends Level {
     // ---- packed cells around the track (procedural, deterministic)
     const cell = ix.handoff.cell;
     const chosen = ho.clone().add(new THREE.Vector3(...cell.centre_um));
-    const r = rng(11), sp = 11.2, R = 85;
+    const r = rng(11), sp = 11.2, R = 55;
     const pos = [], rad = [], nuc = [], tint = [];
     const tmp = new THREE.Vector3();
     const box = new THREE.Box3();
@@ -88,6 +88,7 @@ export class TissueLevel extends Level {
     this.cells = new CellImpostors({ pos: this.cellPos, radius: new Float32Array(rad), nucleus: new Float32Array(nuc), tint: new Float32Array(tint) });
     this.offset.add(this.cells);
     this.fade(this.cells.material, 1);
+    this.cells.material.uniforms.uGain.value = 1.15;
     this.cellCount = rad.length;
     this.pickables.push({ hit: spheresHit(this.cellPos, new Float32Array(rad)), label: 'A cell, about 10–12 µm across, with its nucleus. Placement is illustrative; the track is simulated.' });
 

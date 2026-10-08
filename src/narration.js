@@ -2,21 +2,22 @@
 import { fmt } from './data.js';
 
 export function script(n) {
+  const sep = n.dsbSeparation && n.dsbSeparation.value > 0 ? `${fmt(n.dsbSeparation)} apart` : 'directly opposite each other';
   return [
-    { t: 1.5, level: 'room', text: `A linear accelerator treats a tumour in the pelvis with a 6 MV X-ray beam: billions of photons every second.` },
-    { t: 11.5, level: 'room', text: `We have slowed time until it stops. Choose the one photon that glows.`, prompt: true },
-    { t: 25, level: 'patient', text: `This photon carries ${fmt(n.photonE0)}. It crosses ${fmt(n.depth)} of tissue before it interacts.` },
-    { t: 44.5, level: 'patient', text: `Near the target it Compton-scatters: the photon leaves with ${fmt(n.photonE1)}, and an electron is set moving with ${fmt(n.electronE0)}.` },
-    { t: 60, level: 'tissue', text: `The electron, not the photon, does the damage. It travels ${fmt(n.electronPath)} through tissue, through cells about ten micrometres across.` },
-    { t: 76, level: 'tissue', text: `A fast electron like this is sparsely ionising: it loses only about ${fmt(n.letPrimary)}.` },
-    { t: 94, level: 'cell', text: `Inside a tumour cell nucleus, the fast electron passes straight through.` },
-    { t: 102, level: 'cell', text: `On its way it knocks out a slower secondary electron, a delta electron of ${fmt(n.deltaE)}.` },
-    { t: 126, level: 'chromatin', text: `DNA here is wound around histone proteins as nucleosomes. The slow delta electron ionises densely, on the scale of the DNA itself.` },
-    { t: 162, level: 'dna', text: `Each point is one interaction. Ionisations are orange, excitations blue, coloured by type from the simulation.` },
-    { t: 176, level: 'dna', text: `Energy above 17.5 electronvolts deposited on the sugar–phosphate backbone breaks a strand. Two breaks on opposite strands, ${fmt(n.dsbSeparation)} apart, make a double-strand break.` },
-    { t: 192, level: 'dna', text: `Damage this clustered comes mostly from slow secondary electrons and track ends, not from the fast electron itself.` },
-    { t: 207, level: 'return', text: `Back out to the treatment room.` },
-    { t: 217, level: 'return', text: `One 2 Gy treatment sends about ${fmt(n.tracksPerNucleus2Gy, 2)} electron tracks like this through every tumour cell nucleus in the field.`, closing: true },
+    { t: 1.5, level: 'room', text: 'A linear accelerator is treating a tumour in the pelvis with a 6 MV X-ray beam.' },
+    { t: 11.5, level: 'room', text: 'We have slowed time to a stop: choose the one photon that glows.', prompt: true },
+    { t: 25, level: 'patient', text: `This ${fmt(n.photonE0)} photon crosses ${fmt(n.depth)} of tissue, then Compton-scatters near the target.` },
+    { t: 44.5, level: 'patient', text: `It leaves with ${fmt(n.photonE1)} and hands ${fmt(n.electronE0)} to an electron.` },
+    { t: 60, level: 'tissue', text: `That electron does the damage, travelling ${fmt(n.electronPath)} through tissue made of cells about ten micrometres across.` },
+    { t: 76, level: 'tissue', text: `At this energy it is sparsely ionising: it loses only about ${fmt(n.letPrimary)}.` },
+    { t: 94, level: 'cell', text: 'Inside a tumour cell nucleus, the fast electron passes straight through.' },
+    { t: 102, level: 'cell', text: `On the way it knocks out a slower delta electron of ${fmt(n.deltaE)}, which we now follow.` },
+    { t: 126, level: 'chromatin', text: 'Here the DNA is wrapped around histone proteins as nucleosomes.' },
+    { t: 142, level: 'chromatin', text: 'The slow delta electron ionises densely, on the scale of the DNA itself.' },
+    { t: 166, level: 'dna', text: `Each point is one simulated interaction; where more than 17.5 electronvolts lands on one nucleotide's backbone a strand breaks, and here both strands break, ${sep}.` },
+    { t: 188, level: 'dna', text: 'Damage this clustered comes mostly from slow secondary electrons and track ends like this one, not from the fast electron itself.' },
+    { t: 207, level: 'return', text: 'Back out to the treatment room.' },
+    { t: 217, level: 'return', text: `One 2 Gy treatment sends about ${fmt(n.tracksPerNucleus2Gy, 2)} electron tracks like the one we followed through every tumour cell nucleus in the field.`, closing: true },
   ];
 }
 

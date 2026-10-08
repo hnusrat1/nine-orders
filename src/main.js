@@ -465,11 +465,12 @@ renderer.setAnimationLoop(() => {
   if (debug.ready) step(dt);
   renderer.render(scene, camera);
   debug.drawCalls = renderer.info.render.calls;
+  debug.triangles = renderer.info.render.triangles;
 });
 
 // ------------------------------------------------------------------ test hooks
 Object.assign(debug, {
-  state: () => ({ T: S.T, z: S.z, mode: S.mode, paused: S.paused, selected: S.selected, dominant: S.dominant, started: S.started, ended: S.ended, presenting: renderer.xr.isPresenting, drawCalls: debug.drawCalls }),
+  state: () => ({ T: S.T, z: S.z, mode: S.mode, paused: S.paused, selected: S.selected, dominant: S.dominant, started: S.started, ended: S.ended, presenting: renderer.xr.isPresenting, drawCalls: debug.drawCalls, triangles: debug.triangles }),
   start, setMode, setVoice,
   setT: (t) => { S.T = t; if (t > HOLD_T) S.selected = true; },
   setZ: (z) => { S.z = z; },

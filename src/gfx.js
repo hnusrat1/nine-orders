@@ -165,7 +165,7 @@ export class CellImpostors extends THREE.Mesh {
     const m = new THREE.ShaderMaterial({
       uniforms: {
         uOpacity: { value: 1 }, uAnchor: { value: new THREE.Vector3() }, uFadeR: { value: 2.0 },
-        uMem: { value: new THREE.Color(0x6fa9c9) }, uNuc: { value: new THREE.Color(0x9a7fd6) },
+        uMem: { value: new THREE.Color(0x6fa9c9) }, uNuc: { value: new THREE.Color(0x9a7fd6) }, uGain: { value: 1 },
       },
       vertexShader: /* glsl */`
         attribute vec3 iPos; attribute float iRad, iNuc, iTint;
@@ -183,7 +183,7 @@ export class CellImpostors extends THREE.Mesh {
           gl_Position = projectionMatrix * mv;
         }`,
       fragmentShader: /* glsl */`
-        uniform vec3 uMem, uNuc;
+        uniform vec3 uMem, uNuc; uniform float uGain;
         varying vec2 vUv; varying float vNuc, vAlpha, vTint;
         void main() {
           float r2 = dot(vUv, vUv);
@@ -196,7 +196,7 @@ export class CellImpostors extends THREE.Mesh {
             float zn = sqrt(1.0 - rn2);
             col += uNuc * (0.03 + 0.25 * pow(1.0 - zn, 2.0));
           }
-          gl_FragColor = vec4(col * vAlpha, 1.0);
+          gl_FragColor = vec4(col * vAlpha * uGain, 1.0);
         }`,
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     });
@@ -204,6 +204,22 @@ export class CellImpostors extends THREE.Mesh {
     this.frustumCulled = false;
   }
   set opacity(v) { this.material.uniforms.uOpacity.value = v; }
+}
+
+// Dissolve (dithered) surfaces closer than `near` display metres to the eye, so
+// nearby objects do not hide the particle at the anchor.
+export function nearFade(material, near = 0.35) {
+  material.onBeforeCompile = (sh) => {
+    sh.uniforms.uNear = { value: near };
+    sh.fragmentShader = 'uniform float uNear;\n' + sh.fragmentShader.replace('#include <alphahash_fragment>', `#include <alphahash_fragment>
+      {
+        float nd = vViewPosition.z; // vViewPosition = -mvPosition, so this is the distance in front of the eye
+        float h = fract(sin(dot(floor(gl_FragCoord.xy), vec2(12.9898, 78.233))) * 43758.5453);
+        if (nd < uNear && h > smoothstep(0.35 * uNear, uNear, nd)) discard;
+      }`);
+  };
+  material.customProgramCacheKey = () => 'nearfade' + near;
+  return material;
 }
 
 // ---------------------------------------------------------------- Fresnel surfaces

@@ -23,8 +23,8 @@ export function fmt(entry, digits) {
   if (!entry) return '?';
   const v = entry.value;
   const d = digits ?? entry.digits ?? 3;
-  let s;
-  if (Math.abs(v) >= 1000 && Number.isInteger(Math.round(v)) && d <= 4) s = Math.round(v).toLocaleString('en-US');
-  else s = (+v.toPrecision(d)).toString();
-  return entry.unit ? `${s} ${entry.unit}` : s;
+  const r = +v.toPrecision(d);
+  const s = Math.abs(r) >= 1000 ? r.toLocaleString('en-US') : r.toString();
+  if (!entry.unit) return s;
+  return entry.unit === '°' ? `${s}°` : `${s} ${entry.unit}`;
 }

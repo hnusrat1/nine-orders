@@ -1,34 +1,81 @@
 # Nine Orders
 
-A WebXR experience that follows one 6 MV radiotherapy photon from the linear accelerator to a double-strand break in DNA, in one continuous zoom from 1 m to 1 nm. Runs in the Meta Quest browser, on desktop and on phones. Static site, no build step.
+One 6 MV radiotherapy photon, followed from the linear accelerator to a double-strand break in DNA, in one continuous zoom from 1 m to 1 nm. A WebXR experience for the Meta Quest browser that also runs on desktop and phones, built for patients, students, residents and funders.
 
-**Status: skeleton.** All seven stages are playable with placeholder geometry and synthetic tracks (`sim/synthetic.py`). The app says so on the start screen. Geant4 data and real art replace the placeholders next.
+Every track and every number on screen comes from Monte Carlo simulation (Geant4 and Geant4-DNA) and is listed, with how it was computed, in the About panel.
 
-## Run locally
+## The journey
 
-Any static server from the repository root, for example:
+About four minutes in Guided mode. Each stage shows a scale bar in real units and a log-scale strip from 10⁰ m to 10⁻⁹ m.
 
-```
-python3 -m http.server 8000
-```
-
-then open http://localhost:8000. WebXR needs HTTPS or localhost.
+1. **Treatment room, 1 m.** A generic linac at gantry 0° treats a patient's pelvis. Time slows to a stop; you pick the one photon that glows.
+2. **Patient, 10 cm.** The photon enters the pelvis among translucent organs and Compton-scatters near the prostate. The callout gives the photon and electron energies.
+3. **Tissue, 1 mm to 100 µm.** We ride the recoil electron through packed cells.
+4. **Cell, 10 µm.** Inside a tumour cell nucleus the fast electron passes straight through and knocks out a slow delta electron.
+5. **Chromatin, 100 nm to 10 nm.** Nucleosomes (PDB 1KX5) on linker DNA; the delta electron's ionisations arrive.
+6. **DNA, 1 nm.** B-DNA (PDB 1BNA) at atomic scale. Interactions appear in their simulated time order, coloured by type; backbone deposits above 17.5 eV become strand breaks, and the helix comes apart at the double-strand break.
+7. **Return.** Back out to the room in ten seconds, with the number of electron tracks a 2 Gy fraction sends through one nucleus.
 
 ## Controls
 
 | | Zoom | Look | Pause and label | Other |
 |---|---|---|---|---|
-| VR | left stick (or either stick) forward/back | move your head | trigger | grip: grab and rotate; A/X: Guided ↔ Explore; B/Y: mute |
-| Desktop | scroll wheel or W/S | drag to orbit | click | Space pause, G/E mode, M mute, Esc menu |
+| VR (Quest) | left stick forward/back (either stick works) | your head | trigger: pause and label what you point at; trigger again to continue | grip: grab and rotate; A/X: Guided ↔ Explore; B/Y: mute narration |
+| Desktop | scroll wheel, or W/S | drag to orbit | click | Space pause, G/E mode, M mute, Esc menu |
 | Phone | pinch | drag to orbit | tap | |
 
-Guided mode plays the journey (about 4 minutes); zooming scrubs along it. Explore mode lets you stop at any scale.
+In **Guided** mode the journey plays by itself and zooming scrubs along it. In **Explore** mode you stop at any scale and each scale's story replays while you are there. Narration uses the browser's speech synthesis; subtitles are always on.
+
+## Run locally
+
+It is a static site with no build step:
+
+```
+python3 -m http.server 8000
+```
+
+then open http://localhost:8000 (WebXR needs HTTPS or localhost). On a Quest, open the GitHub Pages URL in the Meta Quest browser and press **Enter VR**.
+
+## Regenerate the simulation data
+
+Everything in `assets/data/` and `assets/models/` is produced by `sim/regenerate.sh`: Geant4 11.4.3 from conda-forge, Geant4-DNA, Python, and Blender as a Python module. See [`sim/README.md`](sim/README.md) for the one-time setup, each step, and the data format.
+
+```
+sim/regenerate.sh            # about 15 minutes on 4 cores
+python3 sim/check_physics.py # recompute every on-screen number from the data files
+```
+
+## Physics notes
+
+- **Patient scale.** Geant4 with `G4EmStandardPhysics_option4` in a 2.5 mm voxel pelvis (air, soft tissue, homogenised bone, urine) made from the anatomy meshes. A point source 100 cm above the isocentre fires photons over a 10 × 10 cm field with energies from the Mohan et al. (1985) 6 MV spectrum. We keep a photon whose first interaction is a Compton scatter in the prostate and record its recoil electron and all secondaries (1 µm production cut).
+- **Hand-off.** From that electron's track we take a delta electron of a few keV created inside the prostate. The cell and DNA scales are separate Geant4-DNA simulations in liquid water, started with the same particle type, energy and direction: the fast electron over 40 µm (`G4EmDNAPhysics_option2`) and the delta electron itself (`G4EmDNAPhysics_option4`).
+- **Why a delta electron.** A fast MeV electron is sparsely ionising, roughly 0.2 keV/µm, about one ionisation every 100 nm. Clustered DNA damage comes mostly from low-energy secondary electrons and track ends, so the DNA-scale event is a delta electron taken from the simulated track. The narration says so.
+- **Strand breaks.** The chromatin model packs 1KX5 nucleosomes and 1BNA-built linker DNA around the track. A deposit counts towards a nucleotide if it lies inside the van der Waals sphere of one of its sugar or phosphate atoms. More than 17.5 eV in one nucleotide is a single-strand break (Nikjoo et al. 2001). Two on opposite strands within 10 bp make a double-strand break. The event shown is a real history and placement from that search, and the About panel gives how often placements produced breaks.
+- **Tracks per nucleus.** Dose and electron fluence in a 1 cm sphere in the prostate, from a separate run of 4 million photons, give electrons per µm² per Gy. Multiplying by 2 Gy and the cross-section of a 9 µm nucleus gives the closing number.
+
+### Known approximations
+
+- DNA, histones and cells are liquid water for the transport physics. Only direct energy deposition is scored: no water radiolysis or radical attack, which in reality causes much of the DNA damage from X-rays.
+- The beam is an ideal point source with one spectrum across a uniform field: no flattening-filter softening off axis, head scatter or electron contamination. The room and linac are generic.
+- The anatomy combines a MakeHuman body surface with BodyParts3D organs from a different person, placed by the hip joints. Bone is one material (ICRP cortical composition at 1.40 g/cm³).
+- The cell, nucleus, chromosome territories and chromatin packing are illustrative models. Strand-break frequencies depend strongly on the threshold and target-volume definitions and apply to this model only.
+- Time is slowed by a different factor at each scale, so speeds are not comparable between scales.
 
 ## Tests
 
 ```
 cd tests && npm install
-node run-desktop.mjs     # Playwright, headless Chromium: every level, screenshots in tests/screenshots/
-node run-xr.mjs          # IWER WebXR emulator (Quest 3): enter VR, Guided end to end, stick, trigger, grip
-python3 ../sim/check_physics.py   # recompute every on-screen number from assets/data
+node run-desktop.mjs   # Playwright, headless Chromium: all stages, screenshots in tests/screenshots/, fails on console errors or >150 draw calls
+node run-xr.mjs        # Meta IWER (Quest 3 emulation): Enter VR, trigger selects the photon, Guided end to end, stick scrub, Explore toggle, trigger labels, grip rotate; logs frame times
+python3 ../sim/check_physics.py
 ```
+
+The IWER test page is generated in memory by `run-xr.mjs` and never exists as a file in the site.
+
+## Engineering notes
+
+- three.js r170 is vendored in `vendor/three/` and loaded with an import map; nothing is fetched from a CDN at runtime.
+- Each scale is its own scene in its own units with the particle at the origin. Zoom is one exponent; each level renders only inside its own window and cross-fades with its neighbours, so no coordinate handed to the GPU spans more than about two orders of magnitude.
+- Cells, nucleosomes, atoms, track segments and interaction points are instanced (one draw call each). Models use meshopt compression. Fixed foveation is set to 0.2 in VR.
+
+Sources, licences and citations: [CREDITS.md](CREDITS.md).

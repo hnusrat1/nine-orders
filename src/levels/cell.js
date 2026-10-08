@@ -41,7 +41,7 @@ export class CellLevel extends Level {
         const p = ctr.clone().add(new THREE.Vector3(gauss(r), gauss(r), gauss(r)).multiplyScalar(0.55));
         if (p.length() > R * 0.95) continue;
         p.add(nc);
-        pts.push(p.x, p.y, p.z); col.push(cC.r * 0.07, cC.g * 0.07, cC.b * 0.07); sz.push(0.28 + r() * 0.25);
+        pts.push(p.x, p.y, p.z); col.push(cC.r * 0.028, cC.g * 0.028, cC.b * 0.028); sz.push(0.22 + r() * 0.2);
       }
     }
     this.domains = new GlowPoints({ pos: new Float32Array(pts), color: new Float32Array(col), size: new Float32Array(sz), minAngle: 0.002, core: 0 });

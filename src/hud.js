@@ -130,7 +130,7 @@ export class Callout {
     c.font = '400 25px system-ui, sans-serif'; c.fillStyle = INK;
     rows.forEach((r, i) => {
       if (Array.isArray(r)) {
-        c.fillStyle = DIM; c.fillText(r[0], 18, 64 + i * 38);
+        c.fillStyle = r[2] || DIM; c.fillText(r[0], 18, 64 + i * 38);
         c.fillStyle = INK; c.fillText(r[1], W * 0.42, 64 + i * 38);
       } else c.fillText(r, 18, 64 + i * 38);
     });

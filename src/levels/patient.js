@@ -24,15 +24,24 @@ export class PatientLevel extends Level {
     const anat = new THREE.Group();
     this.offset.add(anat);
     if (assets.pelvis) {
-      const m = assets.pelvis.clone();
-      anat.add(m);
-      m.traverse((o) => {
-        if (!o.isMesh) return;
-        const info = (ix.anatomy || []).find((a) => o.name.startsWith(a.id)) || { color: '#9fb4c8', label: o.name };
-        o.material = fresnelMaterial({ color: info.color, rim: info.rim ?? 2.0, base: info.base ?? 0.03, strength: info.strength ?? 0.9, side: THREE.DoubleSide });
-        this.fade(o.material);
-        this.pickables.push({ hit: meshHit(o), label: info.label });
-      });
+      // BodyParts3D organs and bones (CC BY-SA) and the MakeHuman body surface, in the isocentre frame (mm)
+      const iso = new THREE.Vector3(...ix.geometry.iso_mm);
+      const add = (root, fallback) => {
+        const m = root.clone();
+        m.position.copy(iso);
+        anat.add(m);
+        m.traverse((o) => {
+          if (!o.isMesh) return;
+          const info = (ix.anatomy || []).find((a) => o.name === a.id || o.name.startsWith(a.id)) || fallback;
+          const bone = /hip|femur|sacrum|l5/.test(info.id || '');
+          o.material = fresnelMaterial({ color: info.color, rim: info.rim ?? (bone ? 2.4 : 1.8), base: info.base ?? (info.id === 'prostate' ? 0.1 : 0.025),
+            strength: info.strength ?? (bone ? 0.55 : 0.85), side: THREE.FrontSide });
+          this.fade(o.material);
+          this.pickables.push({ hit: meshHit(o), label: info.label });
+        });
+      };
+      add(assets.pelvis, { id: 'organ', color: '#9fb4c8', label: 'Pelvic anatomy (BodyParts3D)' });
+      if (assets.body) add(assets.body, { id: 'body', color: '#7f9fb8', label: 'Body surface (MakeHuman)', rim: 2.8, strength: 0.55 });
     } else {
       for (const a of ix.anatomy) {
         const geo = new THREE.SphereGeometry(1, 40, 24);

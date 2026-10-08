@@ -23,11 +23,28 @@ export class RoomLevel extends Level {
     const content = new THREE.Group();
     this.offset.add(content);
     if (assets.room) {
+      // generic room and linac with lighting baked in Blender (sim/art/room.py): drawn unlit
       const m = assets.room.clone();
-      m.position.copy(iso).setY(floorY);
+      m.position.set(iso.x, floorY, iso.z);
+      m.traverse((o) => {
+        if (!o.isMesh) return;
+        const mat = new THREE.MeshBasicMaterial({ map: o.material.map, toneMapped: false });
+        mat.alphaHash = true;
+        o.material = mat;
+        this.fade(mat);
+      });
       content.add(m);
-      m.traverse((o) => { if (o.material) this.fade(o.material); });
       this.roomMesh = m;
+      if (assets.body) {
+        const body = assets.body.clone();
+        body.scale.setScalar(1e-3);
+        body.position.copy(iso);
+        const bm = solidMaterial({ color: 0xb9ada3, roughness: 0.85 });
+        body.traverse((o) => { if (o.isMesh) o.material = bm; });
+        this.fade(bm);
+        content.add(body);
+        this.pickables.push({ hit: meshHit(body), label: 'The patient, lying on their back with the prostate at the isocentre. Body surface from MakeHuman (CC0).' });
+      }
     } else {
       const b = new Batch();
       const W = 7, D = 8, H = 3.1;

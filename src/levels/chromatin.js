@@ -1,7 +1,7 @@
 // Level 5 — chromatin, 100 nm to 10 nm. Units: nm, origin at the hand-off point.
 import * as THREE from 'three';
 import { Level, spheresHit, sphereHit } from '../level.js';
-import { Ribbons, GlowPoints, solidMaterial } from '../gfx.js';
+import { Ribbons, GlowPoints, solidMaterial, nearFade } from '../gfx.js';
 import { trackSegments, eventPoints, trackPolyline } from '../tracks.js';
 import { Callout } from '../hud.js';
 import { fmt } from '../data.js';
@@ -22,6 +22,8 @@ export function nucleosomeGeometries() {
     }
   }
   const dna = new THREE.TubeGeometry(new Helix(), 96, 1.0, 10, false);
+  // match the 1KX5 nucleosome reference frame used by the data (superhelix axis along z)
+  core.rotateX(Math.PI / 2); dna.rotateX(Math.PI / 2);
   return { core, dna };
 }
 
@@ -31,8 +33,8 @@ export class ChromatinLevel extends Level {
     const ix = data.index, n = data.n;
     const N = data.sets.nucleosomes;
     const geoms = assets.nucleosome || nucleosomeGeometries();
-    const mCore = solidMaterial({ color: 0x7d6bb3, roughness: 0.6 });
-    const mDna = solidMaterial({ color: 0xd9b26f, roughness: 0.5 });
+    const mCore = nearFade(solidMaterial({ color: 0x6f5fa8, roughness: 0.6 }), 0.45);
+    const mDna = nearFade(solidMaterial({ color: 0xd2a862, roughness: 0.5 }), 0.45);
     this.core = new THREE.InstancedMesh(geoms.core, mCore, N.count);
     this.dna = new THREE.InstancedMesh(geoms.dna, mDna, N.count);
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1);
@@ -45,10 +47,20 @@ export class ChromatinLevel extends Level {
     this.fade(mCore); this.fade(mDna);
     this.pickables.push({ hit: spheresHit(N.pos, 5.5), label: 'Nucleosome: 147 base pairs of DNA wrapped 1.65 turns around eight histone proteins (structure from PDB 1KX5).' });
 
-    // linker DNA between nucleosomes
+    // linker DNA between nucleosomes: B-DNA, 2 nm across
     const Lk = data.sets.linkers;
-    this.linkers = new Ribbons({ ...trackSegments(Lk, { width: 1.0, color: () => [0.85, 0.7, 0.45] }), minAngle: 0.0012, softness: 0.0 });
-    this.offset.add(this.linkers); this.fade(this.linkers.material, 0.8);
+    const nL = Lk.count / 2;
+    this.linkers = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, 10, 1, true), mDna, nL);
+    const up = new THREE.Vector3(0, 1, 0), a = new THREE.Vector3(), b = new THREE.Vector3(), d = new THREE.Vector3(), lq = new THREE.Quaternion();
+    for (let i = 0; i < nL; i++) {
+      a.fromArray(Lk.pos, 6 * i); b.fromArray(Lk.pos, 6 * i + 3);
+      d.subVectors(b, a);
+      lq.setFromUnitVectors(up, d.clone().normalize());
+      m.compose(a.clone().add(b).multiplyScalar(0.5), lq, new THREE.Vector3(1, d.length(), 1));
+      this.linkers.setMatrixAt(i, m);
+    }
+    this.offset.add(this.linkers);
+    this.pickables.push({ hit: (ray) => spheresHit(Lk.pos, 1.5)(ray), label: 'Linker DNA between nucleosomes: B-DNA, 2 nm across (built from PDB 1BNA).' });
 
     // delta electron events and path
     const D = data.sets.delta;
@@ -56,7 +68,7 @@ export class ChromatinLevel extends Level {
     for (let i = 0; i < D.count; i++) { this.dT[0] = Math.min(this.dT[0], D.time[i]); this.dT[1] = Math.max(this.dT[1], D.time[i]); }
     this.dTrack = new Ribbons({ ...trackSegments(D, { width: (tr) => (tr === 0 ? 0.12 : 0.07), color: (tr) => (tr === 0 ? [1, 0.75, 0.4] : [0.85, 0.55, 0.3]) }), minAngle: 0.001 });
     this.offset.add(this.dTrack);
-    this.dEvents = new GlowPoints({ ...eventPoints(D, { size: 0.35, filter: (i) => D.type[i] >= 1 && D.type[i] <= 4 }), minAngle: 0.0028, flash: 1.5 });
+    this.dEvents = new GlowPoints({ ...eventPoints(D, { size: 0.6, filter: (i) => D.type[i] >= 1 && D.type[i] <= 4, gain: 1.3 }), minAngle: 0.0032, flash: 1.5 });
     this.offset.add(this.dEvents);
     this.pickables.push({ hit: (ray) => spheresHit(this.dEvents.geometry.attributes.iPos.array, 1.2)(ray), label: 'Interaction points of the delta electron: orange = ionisation, blue = electronic excitation, violet = vibrational excitation or attachment.' });
     this.prim = trackPolyline(D, 0);

@@ -1,0 +1,28 @@
+# Patient scale, story mode: find photons whose first interaction is a Compton
+# scatter in the prostate and record the recoil electron in full detail.
+/control/verbose 1
+/run/verbose 1
+/run/numberOfThreads 4
+/nine/mode story
+/nine/voxelBin work/pelvis_vox.bin
+/nine/spectrum work/inputs/mohan6.spectrum
+/nine/out work/runs/patient_story
+/nine/target 0 0 0 mm
+/nine/targetRadius 15 mm
+/nine/eMin 0.3 MeV
+/nine/eMax 1.0 MeV
+/nine/maxSelected 60
+/nine/nx 184
+/nine/ny 128
+/nine/nz 176
+/nine/voxel 2.5 mm
+/nine/origin -230 -150 -230 mm
+/nine/init
+# Separate gamma processes so the first interaction can be identified by name
+/process/em/UseGeneralProcess false
+/run/initialize
+# 1 µm production cut in the patient (electrons ≥ 990 eV become separate tracks)
+/run/setCut 1 mm
+/run/setCutForRegion phantom 0.001 mm
+/random/setSeeds 20251008 6
+/run/beamOn 400000

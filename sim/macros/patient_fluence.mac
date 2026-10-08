@@ -1,0 +1,23 @@
+# Patient scale, fluence mode: dose and fluence of photon-generated electrons in
+# a 10 mm sphere at the prostate centroid, for "electron tracks per nucleus per Gy".
+/control/verbose 1
+/run/verbose 1
+/run/numberOfThreads 4
+/nine/mode fluence
+/nine/voxelBin work/pelvis_vox.bin
+/nine/spectrum work/inputs/mohan6.spectrum
+/nine/out work/runs/patient_fluence
+/nine/target 0 0 0 mm
+/nine/fluenceRadius 10 mm
+/nine/nx 184
+/nine/ny 128
+/nine/nz 176
+/nine/voxel 2.5 mm
+/nine/origin -230 -150 -230 mm
+/nine/init
+/process/em/UseGeneralProcess false
+/run/initialize
+# 0.1 mm production cut (≈85 keV electrons in soft tissue)
+/run/setCut 0.1 mm
+/random/setSeeds 777 2025
+/run/beamOn 4000000

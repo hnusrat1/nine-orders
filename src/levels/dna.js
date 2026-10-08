@@ -22,7 +22,7 @@ export class DnaLevel extends Level {
     const cut = { [pair[0].strand]: pair[0].bp, [pair[1].strand]: pair[1].bp };
     const sides = [[], []];
     for (let i = 0; i < A.count; i++) sides[A.bp[i] <= cut[A.strand[i]] ? 0 : 1].push(i);
-    const geo = new THREE.IcosahedronGeometry(1, 2);
+    const geo = new THREE.SphereGeometry(1, 10, 7);
     const mat = new THREE.MeshStandardMaterial({ roughness: 0.42, metalness: 0.05 });
     mat.alphaHash = true;
     this.fade(mat);
@@ -84,11 +84,11 @@ export class DnaLevel extends Level {
     this.axis = new THREE.Vector3(...dsb.axis);
 
     this.legend = new Callout({ lines: 3, height: 0.216 });
-    this.legend.mesh.position.set(-0.45, 0.224, 0);
-    this.legend.set('Interaction types', [['orange', 'ionisation'], ['blue', 'electronic excitation'], ['violet', 'vibrational / attachment']], '#e8edf2');
+    this.legend.mesh.position.set(-0.62, 0.3, 0);
+    this.legend.set('Interaction types', [['●  orange', 'ionisation', '#ffa040'], ['●  blue', 'electronic excitation', '#5ab0ff'], ['●  red', 'strand break', '#ff5a4d']], '#e8edf2');
     this.ui.add(this.legend.mesh);
     this.callout = new Callout({ lines: 3, height: 0.216 });
-    this.callout.mesh.position.set(0.45, 0.224, 0);
+    this.callout.mesh.position.set(0.62, 0.3, 0);
     this.ui.add(this.callout.mesh);
     this.n = n;
   }

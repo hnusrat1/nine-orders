@@ -48,7 +48,7 @@ for (const [name, T] of stages) {
   const s = await st();
   const subs = await page.evaluate(() => window.__nine.subtitles());
   await page.screenshot({ path: path.join(OUT, name + '.png') });
-  report.push({ name, T, z: +s.z.toFixed(2), level: s.dominant, drawCalls: s.drawCalls, subs: subs.slice(0, 70) });
+  report.push({ name, T, z: +s.z.toFixed(2), level: s.dominant, drawCalls: s.drawCalls, triangles: s.triangles, subs: subs.slice(0, 50) });
   if (s.drawCalls > 150) fail(`${name}: ${s.drawCalls} draw calls`);
 }
 console.table(report);
