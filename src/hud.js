@@ -24,17 +24,10 @@ export class LogStrip {
     this.last = null;
     this.mesh = null;
   }
-  makeMesh(h = 0.42) {
-    this.mesh = panelMesh(this.canvas, h);
-    return this.mesh;
-  }
   draw(z, levelId) {
     const key = z.toFixed(2) + levelId;
     if (key === this.last) return;
-    // a texture upload per frame stutters in VR: redraw at most ~8 times a second unless the stage changed
-    const now = performance.now();
-    if (this.lastLevel === levelId && now - (this.lastT || 0) < 120) return;
-    this.last = key; this.lastLevel = levelId; this.lastT = now;
+    this.last = key;
     const c = this.ctx, W = this.canvas.width, H = this.canvas.height;
     c.clearRect(0, 0, W, H);
     c.fillStyle = 'rgba(5,7,10,0.55)';
@@ -61,7 +54,6 @@ export class LogStrip {
     c.font = '600 21px system-ui, sans-serif'; c.textAlign = 'center'; c.fillStyle = INK;
     const lv = LEVELS.find((l) => l.id === levelId);
     c.fillText(lv ? lv.name : '', W / 2, H - 16);
-    if (this.mesh) this.mesh.material.map.needsUpdate = true;
   }
 }
 
@@ -133,10 +125,13 @@ export class Callout {
     c.font = '600 26px system-ui, sans-serif'; c.fillStyle = accent;
     c.fillText(title, 18, 26);
     c.font = '400 25px system-ui, sans-serif'; c.fillStyle = INK;
+    // value column starts after the widest key
+    const keyW = Math.max(0, ...rows.filter(Array.isArray).map((r) => c.measureText(r[0]).width));
+    const vx = Math.min(W * 0.5, Math.max(W * 0.3, 18 + keyW + 22));
     rows.forEach((r, i) => {
       if (Array.isArray(r)) {
         c.fillStyle = r[2] || DIM; c.fillText(r[0], 18, 64 + i * 38);
-        c.fillStyle = INK; c.fillText(r[1], W * 0.42, 64 + i * 38);
+        c.fillStyle = INK; c.fillText(r[1], vx, 64 + i * 38);
       } else c.fillText(r, 18, 64 + i * 38);
     });
     this.mesh.material.map.needsUpdate = true;
@@ -145,11 +140,14 @@ export class Callout {
 }
 
 // ------------------------------------------------------------- Subtitles panel (VR)
+// About 1.4° per line at 1.25 m: readable on Quest without leaning in.
 export class SubtitlePanel {
   constructor() {
     this.canvas = document.createElement('canvas');
-    this.canvas.width = 1400; this.canvas.height = 190;
-    this.mesh = panelMesh(this.canvas, 0.1);
+    this.canvas.width = 1200; this.canvas.height = 250;
+    this.mesh = panelMesh(this.canvas, 0.15);
+    this.mesh.material.map.generateMipmaps = true;
+    this.mesh.material.map.minFilter = THREE.LinearMipmapLinearFilter;
     this.text = null;
   }
   set(text) {
@@ -157,14 +155,16 @@ export class SubtitlePanel {
     this.text = text;
     const c = this.canvas.getContext('2d'), W = this.canvas.width, H = this.canvas.height;
     c.clearRect(0, 0, W, H);
-    if (!text) { this.mesh.material.map.needsUpdate = true; return; }
-    c.font = '400 40px system-ui, sans-serif';
-    const lines = wrap(c, text, W - 80);
-    c.fillStyle = 'rgba(5,7,10,0.6)';
-    const h = lines.length * 50 + 30;
-    roundRect(c, 10, (H - h) / 2, W - 20, h, 16); c.fill();
+    this.mesh.visible = !!text;
+    if (!text) return;
+    c.font = '400 46px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+    const lines = wrap(c, text, W - 90);
+    const lh = 60;
+    c.fillStyle = 'rgba(5,7,10,0.72)';
+    const h = lines.length * lh + 34;
+    roundRect(c, 10, (H - h) / 2, W - 20, h, 18); c.fill();
     c.fillStyle = INK; c.textAlign = 'center'; c.textBaseline = 'middle';
-    lines.forEach((l, i) => c.fillText(l, W / 2, H / 2 - (lines.length - 1) * 25 + i * 50));
+    lines.forEach((l, i) => c.fillText(l, W / 2, H / 2 - (lines.length - 1) * lh / 2 + i * lh));
     this.mesh.material.map.needsUpdate = true;
   }
 }

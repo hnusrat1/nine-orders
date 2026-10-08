@@ -22,6 +22,7 @@ export class Level {
     this.faders = [];                  // {set(o)} objects
     this.pickables = [];               // {hit(rayLocal) -> distance|null, label()}
     this.weight = 0;
+    this.uiScale = 1;                  // callouts are laid out for the desktop camera (1.55 m away); VR viewers stand closer
   }
 
   // Register something whose opacity follows the level weight.
@@ -44,6 +45,7 @@ export class Level {
     if (!this.root.visible) return;
     this.ui.position.copy(anchorWorld);
     this.ui.quaternion.copy(userQuat);
+    this.ui.scale.setScalar(this.uiScale);
     this.root.position.copy(anchorWorld);
     this.root.quaternion.copy(userQuat);
     const s = levelScale(this.unit, z);
@@ -62,7 +64,8 @@ export class Level {
   // Overridden by levels. lt: level-local story time (s); ctx: shared state.
   update(lt, ctx) {}
 
-  // Ray in world space → nearest pick {distance, label, point}
+  // Ray in world space → pick {distance, label, point}. Highest priority wins, then the nearest:
+  // points of interest (1, default) beat organs (0.5), which beat enclosing surfaces such as the skin (0).
   pick(rayWorld, onlyId) {
     if (!this.root.visible || this.weight < 0.5) return null;
     const inv = new THREE.Matrix4().copy(this.offset.matrixWorld).invert();
@@ -73,7 +76,8 @@ export class Level {
       if (p.enabled && !p.enabled()) continue;
       if (onlyId && p.id !== onlyId) continue;
       const r = p.hit(ray, rayWorld, scale, inv);
-      if (r && (!best || r.d < best.d)) best = { d: r.d, label: typeof p.label === 'function' ? p.label(r) : p.label, local: r.point, id: p.id };
+      const pr = p.priority ?? 1;
+      if (r && (!best || pr > best.priority || (pr === best.priority && r.d < best.d))) best = { d: r.d, priority: pr, label: typeof p.label === 'function' ? p.label(r) : p.label, local: r.point, id: p.id };
     }
     if (best) {
       best.point = best.local.clone().applyMatrix4(this.offset.matrixWorld);

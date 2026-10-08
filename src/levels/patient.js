@@ -37,7 +37,7 @@ export class PatientLevel extends Level {
           o.material = fresnelMaterial({ color: info.color, rim: info.rim ?? (bone ? 2.4 : 1.8), base: info.base ?? (info.id === 'prostate' ? 0.1 : 0.025),
             strength: info.strength ?? (bone ? 0.55 : 0.85), side: THREE.FrontSide });
           this.fade(o.material);
-          this.pickables.push({ hit: meshHit(o), label: info.label });
+          this.pickables.push({ hit: meshHit(o), label: info.label, priority: info.id === 'body' ? 0 : 0.5 });
         });
       };
       add(assets.pelvis, { id: 'organ', color: '#9fb4c8', label: 'Pelvic anatomy (BodyParts3D)' });
@@ -51,7 +51,7 @@ export class PatientLevel extends Level {
         anat.add(mesh);
         this.fade(mesh.material);
         const r = Math.max(...a.radii_mm) * 0.8;
-        if (a.id !== 'body') this.pickables.push({ hit: sphereHit(new THREE.Vector3(...a.center_mm), r), label: a.label });
+        if (a.id !== 'body') this.pickables.push({ hit: sphereHit(new THREE.Vector3(...a.center_mm), r), priority: 0.5, label: a.label });
       }
     }
 

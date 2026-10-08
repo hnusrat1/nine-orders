@@ -6,7 +6,8 @@ Nine Orders code (everything in `src/`, `css/`, `index.html`, `sim/`, `tests/`) 
 
 | What | Where | Licence |
 |---|---|---|
-| three.js r170 (core, GLTFLoader, BufferGeometryUtils, meshopt decoder, RoomEnvironment, EffectComposer and the bloom/output passes) | `vendor/three/` | MIT, © 2010–2024 three.js authors (`vendor/three/LICENSE`); the meshopt decoder is MIT, © Arseny Kapoulkine |
+| three.js r170 (core, GLTFLoader, BufferGeometryUtils, meshopt decoder, RoomEnvironment, EffectComposer and the bloom/output passes, XRControllerModelFactory) | `vendor/three/` | MIT, © 2010–2024 three.js authors (`vendor/three/LICENSE`); the meshopt decoder is MIT, © Arseny Kapoulkine |
+| WebXR Input Profiles: `motion-controllers` 1.0.0 and the Meta Quest / Oculus Touch controller models and profiles from `@webxr-input-profiles/assets` 1.0.20 (github.com/immersive-web/webxr-input-profiles) | `vendor/three/addons/libs/motion-controllers.module.js`, `assets/controllers/` | MIT, © 2019 Amazon (`assets/controllers/LICENSE.md`) |
 | Geant4 11.4.3 (offline simulation only, not shipped) | `sim/g4/` links against it | Geant4 Software Licence |
 | Blender 5.0 as a Python module, `bpy` (offline modelling only) | `sim/art/` | GPL (the generated models are not covered by Blender's licence) |
 | meshoptimizer `gltfpack` (offline compression only) | `sim/art/pack.sh` | MIT |

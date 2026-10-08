@@ -90,7 +90,7 @@ export class TissueLevel extends Level {
     this.fade(this.cells.material, 1);
     this.cells.material.uniforms.uGain.value = 1.15;
     this.cellCount = rad.length;
-    this.pickables.push({ hit: spheresHit(this.cellPos, new Float32Array(rad)), label: 'A cell, about 10–12 µm across, with its nucleus. Placement is illustrative; the track is simulated.' });
+    this.pickables.push({ hit: spheresHit(this.cellPos, new Float32Array(rad)), priority: 0.5, label: 'A cell, about 10–12 µm across, with its nucleus. Placement is illustrative; the track is simulated.' });
 
     // ---- electron "head" marker at the anchor
     this.head = new GlowPoints({ pos: new Float32Array(3), color: new Float32Array([0.7, 0.95, 1]), size: new Float32Array([1.4]), minAngle: 0.01 });

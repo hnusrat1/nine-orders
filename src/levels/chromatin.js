@@ -1,7 +1,7 @@
 // Level 5 — chromatin, 100 nm to 10 nm. Units: nm, origin at the hand-off point.
 import * as THREE from 'three';
 import { Level, spheresHit, sphereHit } from '../level.js';
-import { Ribbons, GlowPoints, solidMaterial, nearFade } from '../gfx.js';
+import { Ribbons, GlowPoints, solidMaterial } from '../gfx.js';
 import { trackSegments, eventPoints, trackPolyline } from '../tracks.js';
 import { Callout } from '../hud.js';
 import { fmt } from '../data.js';
@@ -33,8 +33,8 @@ export class ChromatinLevel extends Level {
     const ix = data.index, n = data.n;
     const N = data.sets.nucleosomes;
     const geoms = assets.nucleosome || nucleosomeGeometries();
-    const mCore = nearFade(solidMaterial({ color: 0x4f4190, roughness: 0.62 }), 0.45);
-    const mDna = nearFade(solidMaterial({ color: 0xa8792f, roughness: 0.5 }), 0.45);
+    const mCore = solidMaterial({ color: 0x4f4190, roughness: 0.62 });
+    const mDna = solidMaterial({ color: 0xa8792f, roughness: 0.5 });
     // Two levels of detail: full surfaces for the nucleosomes nearest the particle, light ones elsewhere.
     this.core = new THREE.InstancedMesh(geoms.core, mCore, N.count);
     this.dna = new THREE.InstancedMesh(geoms.dna, mDna, N.count);
@@ -51,7 +51,7 @@ export class ChromatinLevel extends Level {
     this.assignLod(new THREE.Vector3());
     this.offset.add(this.core, this.dna, this.coreLo, this.dnaLo);
     this.fade(mCore); this.fade(mDna);
-    this.pickables.push({ hit: spheresHit(N.pos, 5.5), label: 'Nucleosome: 147 base pairs of DNA wrapped 1.65 turns around eight histone proteins (structure from PDB 1KX5).' });
+    this.pickables.push({ hit: spheresHit(N.pos, 5.5), priority: 0.5, label: 'Nucleosome: 147 base pairs of DNA wrapped 1.65 turns around eight histone proteins (structure from PDB 1KX5).' });
 
     // linker DNA between nucleosomes: B-DNA, 2 nm across
     const Lk = data.sets.linkers;
@@ -66,7 +66,7 @@ export class ChromatinLevel extends Level {
       this.linkers.setMatrixAt(i, m);
     }
     this.offset.add(this.linkers);
-    this.pickables.push({ hit: (ray) => spheresHit(Lk.pos, 1.5)(ray), label: 'Linker DNA between nucleosomes: B-DNA, 2 nm across (built from PDB 1BNA).' });
+    this.pickables.push({ hit: (ray) => spheresHit(Lk.pos, 1.5)(ray), priority: 0.5, label: 'Linker DNA between nucleosomes: B-DNA, 2 nm across (built from PDB 1BNA).' });
 
     // delta electron events and path
     const D = data.sets.delta;

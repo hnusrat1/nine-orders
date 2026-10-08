@@ -20,11 +20,13 @@ About four minutes in Guided mode. Each stage shows a scale bar in real units an
 
 | | Zoom through the scales | Move | Look | Pause and label | Other |
 |---|---|---|---|---|---|
-| VR (Quest) | right stick up/down | left stick walks; grip grabs the scene to move or turn it | your head; right stick left/right snap-turns 30° | trigger on anything; again to continue | B/Y menu (mode, narration, recenter, restart, exit); A/X Guided ↔ Explore |
+| VR (Quest) | right stick up/down (in Guided it moves along the story) | left stick walks; hold grip to grab the scene and move or turn it | your head; right stick left/right snap-turns 30° | trigger on anything; again to continue | B/Y menu (mode, narration, recenter, restart, exit); A/X Guided ↔ Explore |
 | Desktop | scroll, or `+` / `−` | `W` `A` `S` `D` fly, `Q` `E` down/up, right-drag (or Shift-drag) pans, `F` recenters | drag | click | Space pause, `G` mode, `N` narration, `H` controls, Esc menu; stage bar jumps between stages |
 | Phone | pinch | two-finger drag pans | one-finger drag | tap | toolbar: pause, recenter, controls |
 
 In **Guided** mode the journey plays by itself and zooming scrubs along it. In **Explore** mode you stop at any scale and each scale's story replays while you are there. On entering VR a welcome panel shows the controls; labels on the controllers repeat them for the first half minute. Narration uses the browser's speech synthesis; subtitles are always on.
+
+In VR each scale is a model about a metre across, set 1 m in front of you and a little below eye level; it fades out at its edges and near your eyes, so nothing passes through your head when you walk into it. The reading panels stay put until you turn or step away, then glide back in front. **Recenter** (menu), or holding the Meta button, sets the stage in front of you again. Add `?stats` to the URL for a frame-time readout (in the headset, lower right).
 
 ## Run locally
 
@@ -79,6 +81,8 @@ The IWER test page is generated in memory by `run-xr.mjs` and never exists as a 
 - Each scale is its own scene in its own units with the particle at the origin. Zoom is one exponent; each level renders only inside its own window and cross-fades with its neighbours, so no coordinate handed to the GPU spans more than about two orders of magnitude.
 - Cells, nucleosomes, atoms, bonds, track segments and interaction points are instanced (one draw call each); nucleosomes have two levels of detail. Models use meshopt compression. Fixed foveation is set to 0.2 in VR.
 - Desktop and phone render through a light bloom pass; VR renders directly. Image-based lighting comes from three.js's RoomEnvironment.
+- At load everything is drawn once behind the start panel, so every shader is compiled and every mesh and texture uploaded before the journey starts: no hitch the first time a scale or panel appears.
+- In VR, head and controller poses are read from the current `XRFrame` (three.js only updates its XR camera inside `render()`), and the first placement waits for a tracked pose. Canvas textures are redrawn only when their text changes; hover highlights and the scale marker are separate meshes.
 - The view follows the particle with critically damped smoothing, so the camera never transmits the nanometre zig-zags of the electron track.
 
 Sources, licences and citations: [CREDITS.md](CREDITS.md).

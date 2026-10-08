@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { Level, spheresHit } from '../level.js';
 import { GlowPoints, Ribbons } from '../gfx.js';
+import { clipMaterial } from '../clip.js';
 import { eventPoints, trackSegments } from '../tracks.js';
 import { Callout } from '../hud.js';
 import { fmt } from '../data.js';
@@ -26,8 +27,8 @@ export class DnaLevel extends Level {
     // heavy atoms are closer than 0.19 nm (covalent bond lengths are 0.13–0.16 nm).
     const geo = new THREE.SphereGeometry(1, 12, 8);
     const bondGeo = new THREE.CylinderGeometry(1, 1, 1, 8, 1, true);
-    const mat = new THREE.MeshStandardMaterial({ roughness: 0.38, metalness: 0.05, envMapIntensity: 0.7, transparent: true });
-    const bondMat = new THREE.MeshStandardMaterial({ roughness: 0.45, metalness: 0.0, envMapIntensity: 0.9, transparent: true });
+    const mat = clipMaterial(new THREE.MeshStandardMaterial({ roughness: 0.38, metalness: 0.05, envMapIntensity: 0.7, transparent: true }));
+    const bondMat = clipMaterial(new THREE.MeshStandardMaterial({ roughness: 0.45, metalness: 0.0, envMapIntensity: 0.9, transparent: true }));
     this.fade(mat); this.fade(bondMat);
     const cBack = [new THREE.Color(0xd9893a), new THREE.Color(0x3f86d1)];
     const cBase = [new THREE.Color(0xa89d8e), new THREE.Color(0x8f9aa8)];
@@ -70,7 +71,7 @@ export class DnaLevel extends Level {
       return g;
     });
     this.atomPos = A.pos;
-    this.pickables.push({ hit: spheresHit(A.pos, 0.17), label: (r) => {
+    this.pickables.push({ hit: spheresHit(A.pos, 0.17), priority: 0.5, label: (r) => {
       const i = r.index;
       return `${ELEM[A.elem[i]]} atom, ${A.backbone[i] ? 'sugar–phosphate backbone' : 'base'}, strand ${A.strand[i] ? 'B' : 'A'}. B-DNA coordinates from PDB 1BNA.`;
     } });

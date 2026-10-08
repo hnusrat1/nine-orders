@@ -26,7 +26,7 @@ export class CellLevel extends Level {
     const nucMesh = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 5), fresnelMaterial({ color: 0x9d86e0, rim: 2.2, base: 0.03, strength: 1.0, side: THREE.DoubleSide }));
     nucMesh.position.copy(nc); nucMesh.scale.setScalar(cell.nucleusRadius_um);
     this.offset.add(nucMesh); this.fade(nucMesh.material);
-    this.pickables.push({ hit: sphereHit(nc, cell.nucleusRadius_um), label: `Cell nucleus, ${fmt(n.nucleusDiameter)} across (model), holding the cell's DNA packed as chromatin.` });
+    this.pickables.push({ hit: sphereHit(nc, cell.nucleusRadius_um), priority: 0.5, label: `Cell nucleus, ${fmt(n.nucleusDiameter)} across (model), holding the cell's DNA packed as chromatin.` });
 
     // ---- chromatin domains: 46 chromosome territories as soft clusters
     const pts = [], col = [], sz = [];
@@ -60,7 +60,7 @@ export class CellLevel extends Level {
     }
     this.neigh = new CellImpostors({ pos: new Float32Array(npos), radius: new Float32Array(nrad), nucleus: new Float32Array(nnuc), tint: new Float32Array(ntint) });
     this.offset.add(this.neigh); this.fade(this.neigh.material, 0.8);
-    this.pickables.push({ hit: spheresHit(new Float32Array(npos), new Float32Array(nrad)), label: 'A neighbouring tumour cell.' });
+    this.pickables.push({ hit: spheresHit(new Float32Array(npos), new Float32Array(nrad)), priority: 0.5, label: 'A neighbouring tumour cell.' });
 
     // ---- fast (primary) electron at cell scale: Geant4-DNA events in water
     const P = data.sets.cellPrimary;

@@ -34,7 +34,7 @@ export class Ambient {
       col.set([g, g * 1.05, g * 1.15], 3 * i);
       size[i] = 0.004 + r() * 0.006;
     }
-    this.motes = new GlowPoints({ pos, color: col, size, minAngle: 0.0015, core: 0 });
+    this.motes = new GlowPoints({ pos, color: col, size, minAngle: 0.0015, core: 0, clip: false });
     this.base = pos.slice();
     this.low = new THREE.Color(); this.high = new THREE.Color(); this.tmp = new THREE.Color();
   }

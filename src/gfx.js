@@ -2,10 +2,19 @@
 // glow points (events), ribbons (tracks), impostor spheres (cells) and a rim-lit
 // "fresnel" surface material for translucent anatomy.
 import * as THREE from 'three';
+import { CLIP, CLIP_GLSL, clipMaterial } from './clip.js';
 
 // Minimum on-screen angular size (radians) so that physically tiny markers
 // stay visible when zoomed out. Physical size wins whenever it is larger.
 const MIN_ANGLE = 0.0022;
+
+// Every level primitive fades with the diorama bubble (clip.js) unless built with clip: false.
+const clipUniforms = (u) => ({ ...CLIP, ...u });
+const clipDefines = (on) => (on ? { CLIP: 1 } : {});
+const CLIP_DECL = /* glsl */`
+  #ifdef CLIP
+  ${CLIP_GLSL}
+  #endif`;
 
 const quad = (() => {
   const g = new THREE.InstancedBufferGeometry();
@@ -29,7 +38,7 @@ function setInst(g, name, arr, size) {
 // ---------------------------------------------------------------- GlowPoints
 // items: {pos: Float32Array(3n), color: Float32Array(3n), size: Float32Array(n), birth: Float32Array(n)}
 export class GlowPoints extends THREE.Mesh {
-  constructor({ pos, color, size, birth, minAngle = MIN_ANGLE, flash = 0, core = 0.35 }) {
+  constructor({ pos, color, size, birth, minAngle = MIN_ANGLE, flash = 0, core = 0.35, clip = true }) {
     const n = size.length;
     const g = instGeom(quad, n);
     setInst(g, 'iPos', pos, 3);
@@ -37,23 +46,30 @@ export class GlowPoints extends THREE.Mesh {
     setInst(g, 'iSize', size, 1);
     setInst(g, 'iBirth', birth || new Float32Array(n), 1);
     const m = new THREE.ShaderMaterial({
-      uniforms: {
+      uniforms: clipUniforms({
         uReveal: { value: 1e9 }, uOpacity: { value: 1 }, uMinAngle: { value: minAngle },
         uFlash: { value: flash }, uCore: { value: core }, uTimeScale: { value: 1 },
-      },
+      }),
+      defines: clipDefines(clip),
       vertexShader: /* glsl */`
         attribute vec3 iPos; attribute vec3 iColor; attribute float iSize; attribute float iBirth;
         uniform float uReveal, uOpacity, uMinAngle, uFlash, uTimeScale;
         varying vec2 vUv; varying vec3 vColor; varying float vAlpha;
+        ${CLIP_DECL}
         void main() {
           float age = (uReveal - iBirth) * uTimeScale;
           if (age < 0.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+          float cf = 1.0;
+          #ifdef CLIP
+            cf = clipFade((modelMatrix * vec4(iPos, 1.0)).xyz);
+            if (cf < 0.003) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+          #endif
           vec4 mv = modelViewMatrix * vec4(iPos, 1.0);
           float sc = length(modelViewMatrix[0].xyz);
           float flash = 1.0 + uFlash * exp(-age * 2.5);
           float s = max(iSize * sc, uMinAngle * max(-mv.z, 0.01)) * flash;
           mv.xy += position.xy * s;
-          vUv = position.xy; vColor = iColor * flash; vAlpha = uOpacity;
+          vUv = position.xy; vColor = iColor * flash; vAlpha = uOpacity * cf;
           gl_Position = projectionMatrix * mv;
         }`,
       fragmentShader: /* glsl */`
@@ -79,7 +95,7 @@ export class GlowPoints extends THREE.Mesh {
 // ---------------------------------------------------------------- Ribbons
 // segs: {a: Float32Array(3n), b: Float32Array(3n), color: Float32Array(3n), width: Float32Array(n), birth: Float32Array(2n)}
 export class Ribbons extends THREE.Mesh {
-  constructor({ a, b, color, width, birth, minAngle = MIN_ANGLE * 0.45, softness = 1.0 }) {
+  constructor({ a, b, color, width, birth, minAngle = MIN_ANGLE * 0.45, softness = 1.0, clip = true }) {
     const n = width.length;
     const base = new THREE.BufferGeometry();
     base.setAttribute('position', new THREE.Float32BufferAttribute([0, -1, 0, 1, -1, 0, 1, 1, 0, 0, 1, 0], 3));
@@ -91,11 +107,13 @@ export class Ribbons extends THREE.Mesh {
     setInst(g, 'iWidth', width, 1);
     setInst(g, 'iBirth', birth || new Float32Array(2 * n), 2);
     const m = new THREE.ShaderMaterial({
-      uniforms: { uReveal: { value: 1e9 }, uOpacity: { value: 1 }, uMinAngle: { value: minAngle }, uSoft: { value: softness } },
+      uniforms: clipUniforms({ uReveal: { value: 1e9 }, uOpacity: { value: 1 }, uMinAngle: { value: minAngle }, uSoft: { value: softness } }),
+      defines: clipDefines(clip),
       vertexShader: /* glsl */`
         attribute vec3 iA, iB, iColor; attribute float iWidth; attribute vec2 iBirth;
         uniform float uReveal, uOpacity, uMinAngle;
         varying float vY; varying vec3 vColor; varying float vAlpha;
+        ${CLIP_DECL}
         void main() {
           float f = clamp((uReveal - iBirth.x) / max(iBirth.y - iBirth.x, 1e-6), 0.0, 1.0);
           if (uReveal < iBirth.x) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
@@ -110,7 +128,11 @@ export class Ribbons extends THREE.Mesh {
           float sc = length(modelViewMatrix[0].xyz);
           float w = max(iWidth * sc, uMinAngle * max(-mp.z, 0.01));
           mp.xyz += side * position.y * w;
-          vY = position.y; vColor = iColor; vAlpha = uOpacity;
+          float cf = 1.0;
+          #ifdef CLIP
+            cf = clipFade((modelMatrix * vec4(mix(iA, B, position.x), 1.0)).xyz);
+          #endif
+          vY = position.y; vColor = iColor; vAlpha = uOpacity * cf;
           gl_Position = projectionMatrix * mp;
         }`,
       fragmentShader: /* glsl */`
@@ -157,7 +179,7 @@ export function concatSegments(list) {
 // ---------------------------------------------------------------- Cell impostors
 // Rim-lit spheres with an inner nucleus, faded by distance from the anchor (world space).
 export class CellImpostors extends THREE.Mesh {
-  constructor({ pos, radius, nucleus, tint }) {
+  constructor({ pos, radius, nucleus, tint, clip = true }) {
     const n = radius.length;
     const g = instGeom(quad, n);
     setInst(g, 'iPos', pos, 3);
@@ -165,18 +187,23 @@ export class CellImpostors extends THREE.Mesh {
     setInst(g, 'iNuc', nucleus, 1);
     setInst(g, 'iTint', tint, 1);
     const m = new THREE.ShaderMaterial({
-      uniforms: {
+      uniforms: clipUniforms({
         uOpacity: { value: 1 }, uAnchor: { value: new THREE.Vector3() }, uFadeR: { value: 2.0 },
         uMem: { value: new THREE.Color(0x6fa9c9) }, uNuc: { value: new THREE.Color(0x9a7fd6) }, uGain: { value: 1 },
-      },
+      }),
+      defines: clipDefines(clip),
       vertexShader: /* glsl */`
         attribute vec3 iPos; attribute float iRad, iNuc, iTint;
         uniform vec3 uAnchor; uniform float uFadeR, uOpacity;
         varying vec2 vUv; varying float vNuc, vAlpha, vTint;
+        ${CLIP_DECL}
         void main() {
           vec4 wc = modelMatrix * vec4(iPos, 1.0);
           float d = distance(wc.xyz, uAnchor);
           float fade = 1.0 - smoothstep(0.45 * uFadeR, uFadeR, d);
+          #ifdef CLIP
+            fade *= clipFade(wc.xyz);
+          #endif
           if (fade <= 0.001) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
           vec4 mv = modelViewMatrix * vec4(iPos, 1.0);
           float sc = length(modelViewMatrix[0].xyz);
@@ -220,28 +247,13 @@ export class CellImpostors extends THREE.Mesh {
   set opacity(v) { this.material.uniforms.uOpacity.value = v; }
 }
 
-// Dissolve (dithered) surfaces closer than `near` display metres to the eye, so
-// nearby objects do not hide the particle at the anchor.
-export function nearFade(material, near = 0.35) {
-  material.onBeforeCompile = (sh) => {
-    sh.uniforms.uNear = { value: near };
-    sh.fragmentShader = 'uniform float uNear;\n' + sh.fragmentShader.replace('#include <alphahash_fragment>', `#include <alphahash_fragment>
-      {
-        float nd = vViewPosition.z; // vViewPosition = -mvPosition, so this is the distance in front of the eye
-        float h = fract(sin(dot(floor(gl_FragCoord.xy), vec2(12.9898, 78.233))) * 43758.5453);
-        if (nd < uNear && h > smoothstep(0.35 * uNear, uNear, nd)) discard;
-      }`);
-  };
-  material.customProgramCacheKey = () => 'nearfade' + near;
-  return material;
-}
-
 // ---------------------------------------------------------------- Fresnel surfaces
-export function fresnelMaterial({ color = 0x88aacc, rim = 2.2, base = 0.06, strength = 1.0, side = THREE.FrontSide } = {}) {
+export function fresnelMaterial({ color = 0x88aacc, rim = 2.2, base = 0.06, strength = 1.0, side = THREE.FrontSide, clip = true } = {}) {
   return new THREE.ShaderMaterial({
-    uniforms: { uColor: { value: new THREE.Color(color) }, uOpacity: { value: 1 }, uRim: { value: rim }, uBase: { value: base }, uStrength: { value: strength } },
+    uniforms: clipUniforms({ uColor: { value: new THREE.Color(color) }, uOpacity: { value: 1 }, uRim: { value: rim }, uBase: { value: base }, uStrength: { value: strength } }),
+    defines: clipDefines(clip),
     vertexShader: /* glsl */`
-      varying vec3 vN; varying vec3 vV; varying vec3 vTint;
+      varying vec3 vN; varying vec3 vV; varying vec3 vTint; varying vec3 vClipW;
       void main() {
         vec4 p = vec4(position, 1.0);
         vec3 n = normal;
@@ -254,27 +266,33 @@ export function fresnelMaterial({ color = 0x88aacc, rim = 2.2, base = 0.06, stre
           vTint = instanceColor;
         #endif
         vec4 mv = modelViewMatrix * p;
+        vClipW = (modelMatrix * p).xyz;
         vN = normalize(normalMatrix * n);
         vV = normalize(-mv.xyz);
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: /* glsl */`
       uniform vec3 uColor; uniform float uOpacity, uRim, uBase, uStrength;
-      varying vec3 vN; varying vec3 vV; varying vec3 vTint;
+      varying vec3 vN; varying vec3 vV; varying vec3 vTint; varying vec3 vClipW;
+      ${CLIP_DECL}
       void main() {
+        float cf = 1.0;
+        #ifdef CLIP
+          cf = clipFade(vClipW);
+          if (cf < 0.003) discard;
+        #endif
         float f = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), uRim);
-        gl_FragColor = sRGBTransferEOTF(vec4(uColor * vTint * (uBase + f) * uStrength * uOpacity, 1.0)); // authored as display values
-          #include <colorspace_fragment>
+        gl_FragColor = sRGBTransferEOTF(vec4(uColor * vTint * (uBase + f) * uStrength * uOpacity * cf, 1.0)); // authored as display values
+        #include <colorspace_fragment>
       }`,
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side,
   });
 }
 
-// Opaque lit material that can still fade (dithered alpha, no sorting).
+// Lit surface that can fade: transparent (with depth writes) so whole levels
+// can cross-fade by opacity, and clipped to the diorama bubble.
 export function solidMaterial(params) {
-  // transparent (with depth writes) so whole levels can cross-fade by opacity
-  const m = new THREE.MeshStandardMaterial({ roughness: 0.75, metalness: 0.0, transparent: true, depthWrite: true, ...params });
-  return m;
+  return clipMaterial(new THREE.MeshStandardMaterial({ roughness: 0.75, metalness: 0.0, transparent: true, depthWrite: true, ...params }));
 }
 
 // Sprite-like text label rendered to a canvas, sized in display metres.

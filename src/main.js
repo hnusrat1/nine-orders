@@ -13,9 +13,11 @@ import { LogStrip, ScaleBar, Callout, SubtitlePanel } from './hud.js';
 import { Narrator, script } from './narration.js';
 import { aboutHTML } from './about.js';
 import { introHTML } from './intro.js';
-import { VRMenu, controllerLabel, controllerBody, TitleCard } from './vrui.js';
+import { VRMenu, ControllerLabel, controllerBody, pointerRay, TitleCard, LogStripVR, StatsPanel } from './vrui.js';
+import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
 import { makeComposer } from './post.js';
 import { Ambient } from './ambient.js';
+import { setClip, CLIP_VR, CLIP_DESKTOP } from './clip.js';
 
 const $ = (id) => document.getElementById(id);
 const CLASSES = { room: RoomLevel, patient: PatientLevel, tissue: TissueLevel, cell: CellLevel, chromatin: ChromatinLevel, dna: DnaLevel };
@@ -76,7 +78,7 @@ const S = {
   clocks: Object.fromEntries(LEVELS.map((l) => [l.id, 0])),
   time: 0, voice: true, dominant: 'room', ended: false, lastStage: null,
 };
-const debug = { frameTimes: [], errors: [], ready: false };
+const debug = { frameTimes: [], errors: [], ready: false, stepMs: 0 };
 window.__nine = debug;
 
 let levels = [], data, narrator, logstrip, scaleBar, subsPanel, labelPanel;
@@ -106,12 +108,32 @@ async function boot() {
   $('about-body').innerHTML = aboutHTML(data);
   $('status').textContent = '';
   buildProgress();
+  buildVRFurniture();
   debug.levels = levels;
-  debug.ready = true;
-  // compile every level's shaders up front so the first transition does not hitch
-  for (const L of levels) L.root.visible = true;
-  renderer.compile(scene, camera);
   applyFrame(0);
+  warmUp();
+  debug.ready = true;
+}
+
+// Draw everything once, hidden behind the start panel: compiles every shader and
+// uploads every geometry and texture now rather than as a hitch the first time a
+// level, panel or controller appears (worst in VR, where a dropped frame shows).
+function warmUp() {
+  const restore = [];
+  scene.traverse((o) => {
+    restore.push([o, o.visible, o.frustumCulled]);
+    o.visible = true;
+    o.frustumCulled = false;
+  });
+  const t0 = performance.now();
+  renderer.compile(scene, camera);              // the programs used on screen and in the headset
+  const rt = new THREE.WebGLRenderTarget(64, 64); // a tiny draw: uploads buffers and textures, and the off-screen variants bloom uses
+  renderer.setRenderTarget(rt);
+  renderer.render(scene, camera);
+  renderer.setRenderTarget(null);
+  rt.dispose();
+  for (const [o, v, f] of restore) { o.visible = v; o.frustumCulled = f; }
+  debug.warmUpMs = performance.now() - t0;
 }
 
 // ------------------------------------------------------------------ menu, toolbar, onboarding
@@ -241,7 +263,7 @@ function rayPick(ray) {
   let best = null;
   for (const L of levels) {
     const p = L.pick(ray);
-    if (p && (!best || p.distance < best.distance)) best = p;
+    if (p && (!best || p.priority > best.priority || (p.priority === best.priority && p.distance < best.distance))) best = p;
   }
   return best;
 }
@@ -260,8 +282,7 @@ function showLabel(hit, screen) {
     const cut = words.length > 60 ? words.lastIndexOf(' ', 58) : words.length;
     labelPanel.set(words.slice(0, cut), splitRows(words.slice(cut + 1)));
     const p = hit.point ? hit.point.clone() : anchorWorld.clone().add(new THREE.Vector3(0, 0.25, 0));
-    const head = renderer.xr.getCamera().getWorldPosition(new THREE.Vector3());
-    p.lerp(head, 0.25);
+    p.lerp(xr.head, 0.25);
     labelPanel.mesh.position.copy(p);
     labelPanel.opacity = 1;
   } else {
@@ -281,7 +302,7 @@ function splitRows(s) {
 }
 function hideLabel() { $('label').hidden = true; if (labelPanel) labelPanel.opacity = 0; }
 function recenter() {
-  if (renderer.xr.isPresenting) { placeAnchorInFront(); return; }
+  if (renderer.xr.isPresenting) { xr.needsPlace = true; return; }
   cam.recenter = { t: 0, from: { focus: cam.focus.clone(), r: cam.r, theta: cam.theta, phi: cam.phi } };
 }
 
@@ -407,96 +428,211 @@ function updateDesktopCamera(dt) {
   camera.lookAt(cam.focus);
 }
 
-// ------------------------------------------------------------------ XR controllers and locomotion
+// ------------------------------------------------------------------ XR: poses
+// three.js updates the XR camera's world matrix only inside render(), so before
+// rendering it still holds the previous frame (and the identity on the first
+// frame of a session). Everything here reads the viewer pose of the current
+// XRFrame instead. Poses come in two frames: rig-local (the reference space,
+// what the headset reports) and world (rig-local moved by locomotion).
+const xr = {
+  head: new THREE.Vector3(), yaw: 0,          // world
+  headL: new THREE.Vector3(), yawL: 0,        // rig-local
+  valid: false, emulated: false,
+  placed: false, waitFrames: 0, needsPlace: false,
+};
+const _hm = new THREE.Matrix4(), _fwd = new THREE.Vector3();
+function readHead() {
+  xr.valid = false;
+  const frame = renderer.xr.getFrame(), ref = renderer.xr.getReferenceSpace();
+  const pose = frame && ref ? frame.getViewerPose(ref) : null;
+  if (!pose) return;
+  _hm.fromArray(pose.transform.matrix);
+  xr.headL.setFromMatrixPosition(_hm);
+  _fwd.set(0, 0, -1).transformDirection(_hm);
+  xr.yawL = Math.atan2(-_fwd.x, -_fwd.z);
+  player.updateMatrixWorld();
+  _hm.premultiply(player.matrixWorld);
+  xr.head.setFromMatrixPosition(_hm);
+  _fwd.set(0, 0, -1).transformDirection(_hm);
+  xr.yaw = Math.atan2(-_fwd.x, -_fwd.z);
+  xr.valid = true;
+  xr.emulated = !!pose.emulatedPosition;
+}
+
+// The stage: the particle 0.95 m in front of the eyes and about 19° below them,
+// turned to face you. Called on entering VR, from Recenter, and when the
+// headset's own recentre (hold the Meta button) resets the reference space.
+const STAGE_DIST = 0.95, STAGE_DROP = 0.32;
+function placeStage() {
+  anchorWorld.set(xr.head.x - Math.sin(xr.yaw) * STAGE_DIST, Math.min(1.7, Math.max(0.5, xr.head.y - STAGE_DROP)), xr.head.z - Math.cos(xr.yaw) * STAGE_DIST);
+  userQuat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), xr.yaw);
+  hudSnap();
+}
+
+// ------------------------------------------------------------------ XR: furniture
+// Reading panels live in the player rig, so walking and snap-turning carry them
+// along. Within the rig they follow the head lazily: nothing moves until you
+// turn more than ~28° or step more than ~25 cm away, then they glide back in
+// front. Yaw only, never roll or pitch.
 const menu = new VRMenu();
-scene.add(menu.mesh);
 const titleCard = new TitleCard();
+const hud = { rig: new THREE.Group(), yaw: 0, pos: new THREE.Vector3(), turning: false, moving: false };
+hud.rig.name = 'vr-hud';
+hud.rig.visible = false;
+player.add(hud.rig, menu.mesh);
+let logVR = null, statsVR = null, vignette = null;
+function buildVRFurniture() {
+  subsPanel.mesh.position.set(0, 0.11, -1.25);
+  subsPanel.mesh.name = 'vr-subtitles';
+  titleCard.mesh.position.set(0, 0.4, -1.4);
+  titleCard.mesh.name = 'vr-title';
+  logVR = new LogStripVR(LEVELS, 0.36);
+  logVR.mesh.position.set(-Math.sin(0.66) * 1.05, -0.06, -Math.cos(0.66) * 1.05);
+  logVR.mesh.rotation.y = 0.66;
+  logVR.mesh.name = 'vr-logstrip';
+  hud.rig.add(subsPanel.mesh, titleCard.mesh, logVR.mesh);
+  if (params.has('stats')) {
+    statsVR = new StatsPanel();
+    statsVR.mesh.position.set(0.42, -0.3, -0.9);
+    statsVR.mesh.rotation.y = -0.4;
+    hud.rig.add(statsVR.mesh);
+  }
+  // head-locked edge vignette for fast zooms and walking
+  vignette = new THREE.Mesh(new THREE.RingGeometry(0.06, 0.6, 48, 1), new THREE.ShaderMaterial({
+    uniforms: { uO: { value: 0 } },
+    vertexShader: 'varying vec2 vP; void main(){ vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+    fragmentShader: 'uniform float uO; varying vec2 vP; void main(){ float r = length(vP); float a = smoothstep(0.075, 0.13, r) * uO; gl_FragColor = vec4(0.0,0.0,0.0,a); }',
+    transparent: true, depthTest: false, depthWrite: false,
+  }));
+  vignette.position.set(0, 0, -0.1);
+  vignette.renderOrder = 40;
+  vignette.visible = false;
+  camera.add(vignette);
+}
+function hudSnap() {
+  hud.yaw = xr.yawL; hud.pos.copy(xr.headL);
+  hud.turning = hud.moving = false;
+  hud.rig.position.copy(hud.pos); hud.rig.rotation.set(0, hud.yaw, 0);
+}
+function hudUpdate(dt) {
+  let d = xr.yawL - hud.yaw;
+  d = Math.atan2(Math.sin(d), Math.cos(d));
+  if (Math.abs(d) > 0.49) hud.turning = true;
+  if (hud.turning) {
+    hud.yaw += d * (1 - Math.exp(-dt * 4));
+    if (Math.abs(d) < 0.04) hud.turning = false;
+  }
+  const dx = xr.headL.x - hud.pos.x, dy = xr.headL.y - hud.pos.y, dz = xr.headL.z - hud.pos.z;
+  const dh = Math.hypot(dx, dz);
+  if (dh > 0.25 || Math.abs(dy) > 0.2) hud.moving = true;
+  if (hud.moving) {
+    hud.pos.lerp(xr.headL, 1 - Math.exp(-dt * 4));
+    if (dh < 0.02 && Math.abs(dy) < 0.02) hud.moving = false;
+  }
+  hud.rig.position.copy(hud.pos);
+  hud.rig.rotation.set(0, hud.yaw, 0);
+  titleCard.update(dt);
+}
+
+// ------------------------------------------------------------------ XR: controllers
+const modelFactory = new XRControllerModelFactory().setPath('assets/controllers');
 const controllers = [0, 1].map((i) => {
   const c = renderer.xr.getController(i);
-  const ray = new THREE.Mesh(new THREE.CylinderGeometry(0.0012, 0.0012, 1, 6, 1, true).translate(0, -0.5, 0).rotateX(Math.PI / 2),
-    new THREE.MeshBasicMaterial({ color: 0xffb35c, transparent: true, opacity: 0.5, depthWrite: false }));
-  ray.scale.z = 1.5;
-  c.add(ray);
+  const ray = pointerRay();
+  c.add(ray.group);
   const grip = renderer.xr.getControllerGrip(i);
-  grip.add(controllerBody());
-  c.userData = { ray, prev: {}, grab: null, grip, turnArmed: true, hand: null };
+  const body = controllerBody();
+  const model = modelFactory.createControllerModel(grip);
+  grip.add(body, model);
+  c.userData = { ray, prev: {}, grab: null, grip, body, model, turnArmed: true, hand: null, label: null, source: null };
+  menu.mesh.add(ray.dot);
   c.addEventListener('connected', (e) => {
     c.userData.source = e.data;
     c.userData.hand = e.data.handedness;
-    if (!c.userData.label) { c.userData.label = controllerLabel(e.data.handedness === 'left' ? 'left' : 'right'); grip.add(c.userData.label); }
+    if (!c.userData.label) { c.userData.label = new ControllerLabel(e.data.handedness === 'left' ? 'left' : 'right'); grip.add(c.userData.label.mesh); }
+    c.userData.label.setMode(S.mode);
   });
-  c.addEventListener('disconnected', () => { c.userData.source = null; });
+  c.addEventListener('disconnected', () => { c.userData.source = null; c.userData.grab = null; });
   player.add(c, grip);
   return c;
 });
 let labelsUntil = 0;
 
-function controllerRay(c) {
-  const r = new THREE.Ray();
-  r.origin.setFromMatrixPosition(c.matrixWorld);
-  r.direction.set(0, 0, -1).transformDirection(c.matrixWorld);
-  return r;
+const _rq = new THREE.Quaternion();
+function controllerRay(c, out = new THREE.Ray()) {
+  out.origin.setFromMatrixPosition(c.matrixWorld);
+  out.direction.set(0, 0, -1).transformDirection(c.matrixWorld);
+  return out;
 }
-function headPose() {
-  const xc = renderer.xr.getCamera();
-  const head = new THREE.Vector3().setFromMatrixPosition(xc.matrixWorld);
-  const fwd = new THREE.Vector3(0, 0, -1).transformDirection(xc.matrixWorld);
-  return { head, fwd, yaw: Math.atan2(-fwd.x, -fwd.z) };
+// Rotation about the vertical axis only (swing–twist): grabbing never tilts the horizon.
+function yawOf(q) {
+  return 2 * Math.atan2(q.y, q.w);
 }
+
 function menuState() { return { paused: S.paused, mode: S.mode, voice: S.voice }; }
+let pausedBeforeMenu = false;
 function openMenu(welcome) {
-  const { head, yaw } = headPose();
-  menu.open(welcome, menuState(), head, yaw);
+  if (!welcome) { pausedBeforeMenu = S.paused; setPaused(true); }
+  menu.open(welcome, menuState(), xr.headL, xr.yawL);
   labelsUntil = Infinity;
 }
-function closeMenu() { menu.close(); labelsUntil = S.time + 20; }
+function closeMenu(resume = true) {
+  const wasWelcome = menu.welcome;
+  menu.close();
+  labelsUntil = S.time + (wasWelcome ? 30 : 12);
+  if (resume) setPaused(wasWelcome ? false : pausedBeforeMenu);
+}
 function menuAction(id) {
-  if (id === 'primary') { const wasWelcome = menu.welcome; closeMenu(); setPaused(false); if (wasWelcome) labelsUntil = S.time + 25; }
+  if (id === 'primary') closeMenu();
   else if (id === 'mode') setMode(S.mode === 'guided' ? 'explore' : 'guided');
   else if (id === 'voice') setVoice(!S.voice);
-  else if (id === 'recenter') { placeAnchorInFront(); closeMenu(); setPaused(false); }
-  else if (id === 'restart') { restart(); closeMenu(); setPaused(false); }
+  else if (id === 'recenter') { xr.needsPlace = true; closeMenu(false); setPaused(false); }
+  else if (id === 'restart') { restart(); closeMenu(false); setPaused(false); }
   else if (id === 'exit') { const s = renderer.xr.getSession(); if (s) s.end(); }
   if (menu.isOpen) menu.setState(menuState());
 }
 
+const _ray = new THREE.Ray();
 function pollXR(dt) {
-  if (!renderer.xr.isPresenting) return;
+  player.updateMatrixWorld(true); // controllers were posed for this frame; bring their world matrices up to date
   let hoverIdx = -1;
   for (const c of controllers) {
-    const src = c.userData.source;
-    if (!src || !src.gamepad) continue;
+    const u = c.userData, src = u.source;
+    // stand-in body until the real model has loaded
+    u.body.visible = !(u.model.motionController && u.model.children.length);
+    if (!src || !src.gamepad) { u.ray.dot.visible = false; continue; }
     const gp = src.gamepad, b = gp.buttons, ax = gp.axes;
     const pressed = (i) => !!(b[i] && b[i].pressed);
-    const edge = (i) => pressed(i) && !c.userData.prev[i];
+    const edge = (i) => pressed(i) && !u.prev[i];
     const sx = ax.length >= 4 ? ax[2] : (ax[0] || 0), sy = ax.length >= 4 ? ax[3] : (ax[1] || 0);
     const left = src.handedness === 'left';
-    const ray = controllerRay(c);
+    const ray = controllerRay(c, _ray);
     const mh = menu.hit(ray);
-    if (mh.onPanel) hoverIdx = mh.index;
-    c.userData.ray.scale.z = mh.onPanel ? 0.75 : 1.5;
+    if (mh.onPanel && hoverIdx < 0) hoverIdx = mh.index;
+    u.ray.setLength(mh.onPanel ? mh.distance : 1.2);
+    u.ray.dot.visible = mh.onPanel;
+    if (mh.onPanel) u.ray.dot.position.copy(mh.point).applyMatrix4(_inv4.copy(menu.mesh.matrixWorld).invert()).setZ(0.002);
 
     if (!menu.isOpen) {
       if (left) {
-        // left stick: walk, relative to where you look
+        // left stick: walk where you look
         const mag = Math.hypot(sx, sy);
         if (mag > 0.18) {
-          const { yaw } = headPose();
           const v = 1.1 * dt * Math.min(1, (mag - 0.18) / 0.82) / mag;
           // forward = (-sin yaw, -cos yaw); right = (cos yaw, -sin yaw); stick up (sy < 0) walks forward
-          player.position.x += (-Math.sin(yaw) * -sy + Math.cos(yaw) * sx) * v;
-          player.position.z += (-Math.cos(yaw) * -sy - Math.sin(yaw) * sx) * v;
+          player.position.x += (-Math.sin(xr.yaw) * -sy + Math.cos(xr.yaw) * sx) * v;
+          player.position.z += (-Math.cos(xr.yaw) * -sy - Math.sin(xr.yaw) * sx) * v;
           S.moveVel = Math.min(1, mag);
         }
       } else {
-        // right stick: up/down zooms through the scales, left/right snap-turns 30°
+        // right stick: up/down zooms (Explore) or moves along the story (Guided); left/right snap-turns 30°
         if (Math.abs(sy) > 0.2 && Math.abs(sy) > Math.abs(sx)) {
           const v = -Math.sign(sy) * (Math.abs(sy) - 0.2) / 0.8;
           if (S.mode === 'explore') S.z = Math.min(Z_MAX, Math.max(Z_MIN, S.z + v * 0.7 * dt));
           else scrub(v * 9 * dt);
         }
-        if (c.userData.turnArmed && Math.abs(sx) > 0.7) { snapTurn(-Math.sign(sx) * Math.PI / 6); c.userData.turnArmed = false; }
-        if (Math.abs(sx) < 0.3) c.userData.turnArmed = true;
+        if (u.turnArmed && Math.abs(sx) > 0.7 && !u.grab) { snapTurn(-Math.sign(sx) * Math.PI / 6); u.turnArmed = false; }
+        if (Math.abs(sx) < 0.3) u.turnArmed = true;
       }
     }
 
@@ -508,114 +644,91 @@ function pollXR(dt) {
       const room = levels[0];
       if (!S.selected && room.weight > 0.5 && room.pick(ray, 'photon')) selectPhoton();
       else {
-        c.updateMatrixWorld();
-        c.userData.grab = { m0inv: c.matrixWorld.clone().invert(), a0: anchorWorld.clone(), u0: userQuat.clone() };
+        for (const k of controllers) k.userData.grab = null; // one hand at a time
+        u.grab = { p0: ray.origin.clone(), yaw0: yawOf(c.getWorldQuaternion(_rq)), a0: anchorWorld.clone(), u0: userQuat.clone() };
       }
     }
-    if (!pressed(1)) c.userData.grab = null;
-    if (c.userData.grab) {
-      // the scene follows the hand: same rigid motion applied to the anchor and orientation
-      const g = c.userData.grab;
-      const delta = new THREE.Matrix4().multiplyMatrices(c.matrixWorld, g.m0inv);
-      anchorWorld.copy(g.a0).applyMatrix4(delta);
-      const dq = new THREE.Quaternion().setFromRotationMatrix(delta);
-      userQuat.copy(dq).multiply(g.u0);
+    if (!pressed(1)) u.grab = null;
+    if (u.grab) {
+      // the scene follows the hand: its translation, and its turn about the vertical
+      const g = u.grab;
+      const dyaw = yawOf(c.getWorldQuaternion(_rq)) - g.yaw0;
+      const R = _gq.setFromAxisAngle(_Y, dyaw);
+      anchorWorld.copy(g.a0).sub(g.p0).applyQuaternion(R).add(ray.origin);
+      userQuat.copy(R).multiply(g.u0);
     }
     if (edge(4) && !menu.isOpen) setMode(S.mode === 'guided' ? 'explore' : 'guided'); // A / X
-    if (edge(5)) { if (menu.isOpen) { closeMenu(); setPaused(false); } else { openMenu(false); setPaused(true); } } // B / Y
-    for (let i = 0; i < b.length; i++) c.userData.prev[i] = pressed(i);
+    if (edge(5)) { if (menu.isOpen) closeMenu(); else openMenu(false); } // B / Y
+    for (let i = 0; i < b.length; i++) u.prev[i] = pressed(i);
   }
   menu.setHover(hoverIdx);
-  // while paused, the right ray labels what it points at (a few times a second)
+  if (menu.isOpen) menu.setState(menuState()); // redraws only if something changed
+  // while paused, the right ray labels what it points at (when it has moved)
   if (S.paused && !menu.isOpen && labelPanel.mesh.visible && S.time - (pollXR.lastHover || 0) > 0.2) {
-    pollXR.lastHover = S.time;
     const c = controllers.find((k) => k.userData.hand === 'right') || controllers[0];
-    const hit = rayPick(controllerRay(c));
-    if (hit) showLabel(hit, null);
+    const ray = controllerRay(c);
+    const key = ray.direction.toArray().map((v) => v.toFixed(2)).join() + ray.origin.toArray().map((v) => v.toFixed(2)).join();
+    if (key !== pollXR.lastKey) {
+      pollXR.lastKey = key; pollXR.lastHover = S.time;
+      const hit = rayPick(ray);
+      if (hit) showLabel(hit, null);
+    }
   }
   const showLabels = S.time < labelsUntil;
-  for (const c of controllers) if (c.userData.label) c.userData.label.visible = showLabels;
+  for (const c of controllers) if (c.userData.label) { c.userData.label.mesh.visible = showLabels; c.userData.label.setMode(S.mode); }
 }
+const _inv4 = new THREE.Matrix4(), _gq = new THREE.Quaternion(), _Y = new THREE.Vector3(0, 1, 0);
 
+// Turn the rig about the head, so you stay where you are and the world turns.
 function snapTurn(angle) {
-  const { head } = headPose();
-  const p = player.position.clone().sub(head).applyAxisAngle(new THREE.Vector3(0, 1, 0), angle).add(head);
+  const p = player.position.clone().sub(xr.head).applyAxisAngle(_Y, angle).add(xr.head);
   player.position.copy(p);
   player.rotation.y += angle;
+  readHead();
 }
 
-// ------------------------------------------------------------------ VR furniture
-let vrPlaced = false, vignette;
-// Reading panels in VR follow the head lazily, by yaw only: they stay put until
-// you turn more than ~30°, then glide back in front. No roll, no pitch.
-const hudRig = new THREE.Group();
-const hudFollow = { yaw: null, height: null };
-function placeVR() {
-  const ls = logstrip.makeMesh(0.34);
-  ls.position.set(-0.62, 0.02, -1.05);
-  ls.rotation.y = Math.atan2(0.62, 1.05);
-  hudRig.add(ls);
-  // subtitles just above eye level and the stage title above them, so neither covers the particle below
-  subsPanel.mesh.position.set(0, 0.12, -1.15);
-  hudRig.add(subsPanel.mesh);
-  titleCard.mesh.position.set(0, 0.36, -1.35);
-  hudRig.add(titleCard.mesh);
-  scene.add(hudRig);
-  // head-locked edge vignette for fast zooms and walking
-  const vg = new THREE.RingGeometry(0.06, 0.6, 48, 1);
-  vignette = new THREE.Mesh(vg, new THREE.ShaderMaterial({
-    uniforms: { uO: { value: 0 } },
-    vertexShader: 'varying vec2 vP; void main(){ vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-    fragmentShader: 'uniform float uO; varying vec2 vP; void main(){ float r = length(vP); float a = smoothstep(0.075, 0.13, r) * uO; gl_FragColor = vec4(0.0,0.0,0.0,a); }',
-    transparent: true, depthTest: false, depthWrite: false,
-  }));
-  vignette.position.set(0, 0, -0.1);
-  vignette.renderOrder = 20;
-  camera.add(vignette);
-  vrPlaced = true;
+function xrFrame(dt) {
+  readHead();
+  if (!xr.valid) return false;
+  if (!xr.placed) {
+    // wait until the headset reports a tracked position (or ~1 s), then set the stage and say hello
+    if (xr.emulated && ++xr.waitFrames < 72) return false;
+    placeStage();
+    openMenu(true);
+    xr.placed = true;
+  } else if (xr.needsPlace) {
+    placeStage();
+    xr.needsPlace = false;
+  }
+  pollXR(dt);
+  readHead(); // walking may have moved the rig
+  hudUpdate(dt);
+  return true;
 }
-renderer.xr.addEventListener('sessionstart', () => { hudFollow.yaw = null; if (!vrPlaced) placeVR(); });
+
+renderer.xr.addEventListener('sessionstart', () => {
+  Object.assign(xr, { placed: false, waitFrames: 0, needsPlace: false });
+  hud.rig.visible = true;
+  vignette.visible = true;
+  const ref = renderer.xr.getReferenceSpace();
+  if (ref && ref.addEventListener) ref.addEventListener('reset', () => { xr.needsPlace = true; });
+});
 renderer.xr.addEventListener('sessionend', () => {
   anchorWorld.copy(ANCHOR_DESKTOP); userQuat.identity();
   player.position.set(0, 0, 0); player.rotation.set(0, 0, 0);
   menu.close();
+  hud.rig.visible = false;
+  vignette.visible = false;
+  hideLabel();
 });
-
-function placeAnchorInFront() {
-  const { head, yaw } = headPose();
-  anchorWorld.set(head.x - Math.sin(yaw) * 1.0, Math.min(1.5, Math.max(0.85, head.y - 0.27)), head.z - Math.cos(yaw) * 1.0);
-  userQuat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
-}
-
-function followHead(dt) {
-  if (!renderer.xr.isPresenting) return;
-  const { head, yaw } = headPose();
-  if (hudFollow.yaw === null) {
-    // first VR frame: put the particle 1 m in front of the viewer, about 15° below eye level, and say hello
-    hudFollow.yaw = yaw; hudFollow.height = head.y;
-    placeAnchorInFront();
-    openMenu(true);
-  }
-  let d = yaw - hudFollow.yaw;
-  d = Math.atan2(Math.sin(d), Math.cos(d));
-  if (Math.abs(d) > 0.52 || hudFollow.moving) {
-    hudFollow.moving = Math.abs(d) > 0.05;
-    hudFollow.yaw += d * Math.min(1, dt * 2.5);
-  }
-  hudFollow.height += (head.y - hudFollow.height) * Math.min(1, dt * 1.5);
-  hudRig.position.set(head.x, hudFollow.height, head.z);
-  hudRig.rotation.set(0, hudFollow.yaw, 0);
-  titleCard.update(dt);
-}
 
 // ------------------------------------------------------------------ frame
 const clock = new THREE.Clock();
 function step(dt) {
   S.time += dt;
   S.moveVel *= 0.85;
-  if (!renderer.xr.isPresenting && S.started) desktopKeys(dt);
-  pollXR(dt);
-  followHead(dt);
+  if (renderer.xr.isPresenting) xrFrame(dt);
+  else if (S.started) desktopKeys(dt);
 
   if (S.mode === 'guided') {
     if (S.started && !S.paused && !S.ended) {
@@ -644,6 +757,7 @@ function applyFrame(dt) {
     const w = L.computeWeight(z);
     L.weight = w;
     L.root.position.copy(anchorWorld);
+    L.uiScale = renderer.xr.isPresenting ? 0.72 : 1;
     if (w > 0.002) L.update(S.mode === 'guided' ? S.T - STORY_START[L.id] : S.clocks[L.id], ctx);
     L.apply(z, anchorWorld, userQuat, w, dt);
     if (w > dw) { dw = w; dom = L; }
@@ -654,10 +768,12 @@ function applyFrame(dt) {
     announceStage(S.dominant);
   }
 
-  if (!renderer.xr.isPresenting) updateDesktopCamera(dt);
-  const view = renderer.xr.isPresenting ? renderer.xr.getCamera() : camera;
-  view.updateMatrixWorld();
-  const camPos = new THREE.Vector3().setFromMatrixPosition(view.matrixWorld);
+  const inXR = renderer.xr.isPresenting;
+  if (!inXR) updateDesktopCamera(dt);
+  camera.updateMatrixWorld();
+  const camPos = _camPos;
+  if (inXR) camPos.copy(xr.head); else camPos.setFromMatrixPosition(camera.matrixWorld);
+  setClip(anchorWorld, inXR ? CLIP_VR : CLIP_DESKTOP);
 
   // billboards (callouts, labels) — yaw-only so the horizon stays level
   for (const L of levels) for (const o of L.ui.children) if (o.userData.billboard) yawFace(o, camPos);
@@ -665,11 +781,13 @@ function applyFrame(dt) {
 
   // scale bar under the anchor, facing the viewer
   scaleBar.update(z);
-  const toCam = camPos.clone().sub(anchorWorld); toCam.y = 0; toCam.normalize();
-  scaleBar.group.position.copy(anchorWorld).add(new THREE.Vector3(0, -0.27, 0)).addScaledVector(toCam, 0.15);
+  const toCam = _toCam.copy(camPos).sub(anchorWorld); toCam.y = 0; toCam.normalize();
+  scaleBar.group.position.copy(anchorWorld).addScaledVector(toCam, 0.15);
+  scaleBar.group.position.y -= inXR ? 0.3 : 0.27;
   yawFace(scaleBar.group, camPos);
 
-  logstrip.draw(z, S.dominant);
+  if (inXR) logVR.update(z); else logstrip.draw(z, S.dominant);
+  if (statsVR || statsEl) updateStats();
   ambient.update(levels, camPos, S.time);
   updateProgress();
 
@@ -688,8 +806,25 @@ function applyFrame(dt) {
   S.zVel = S.zVel * 0.85 + zv * 0.15;
   S.lastZ = z;
   const vo = Math.max(smooth((S.zVel - 0.35) / 0.8) * 0.85, S.moveVel * 0.55);
-  $('vignette').style.opacity = renderer.xr.isPresenting ? '0' : (smooth((S.zVel - 0.35) / 0.8) * 0.85).toFixed(2);
+  const vd = inXR ? '0' : (smooth((S.zVel - 0.35) / 0.8) * 0.85).toFixed(2);
+  if (vd !== applyFrame.vd) { $('vignette').style.opacity = vd; applyFrame.vd = vd; }
   if (vignette) vignette.material.uniforms.uO.value = vo;
+}
+const _camPos = new THREE.Vector3(), _toCam = new THREE.Vector3();
+
+// ?stats: frame-time readout (in the headset, a small panel lower right)
+const statsEl = params.has('stats') ? Object.assign(document.createElement('div'), { id: 'stats' }) : null;
+if (statsEl) document.body.appendChild(statsEl);
+function updateStats() {
+  const now = performance.now();
+  if (now - (updateStats.t || 0) < 500) return;
+  updateStats.t = now;
+  const ft = debug.frameTimes.slice(-90).sort((a, b) => a - b);
+  if (!ft.length) return;
+  const p50 = ft[Math.floor(ft.length * 0.5)], p95 = ft[Math.floor(ft.length * 0.95)];
+  const lines = [`${(1000 / p50).toFixed(0)} fps  p95 ${p95.toFixed(1)} ms`, `step ${(debug.stepMs || 0).toFixed(1)} ms  calls ${debug.drawCalls}`, `${(debug.triangles / 1000).toFixed(0)}k tris  ${S.dominant}`];
+  if (statsVR && renderer.xr.isPresenting) statsVR.draw(lines);
+  if (statsEl) statsEl.textContent = lines.join('\n');
 }
 
 let stageTimer = null;
@@ -708,13 +843,14 @@ function announceStage(id) {
   titleCard.show(num, name, st.scale);
 }
 
+const _yp = new THREE.Vector3(), _yq = new THREE.Quaternion();
 function yawFace(o, camPos) {
-  const p = o.getWorldPosition(new THREE.Vector3());
+  o.updateWorldMatrix(true, false);
+  const p = _yp.setFromMatrixPosition(o.matrixWorld);
   o.rotation.set(0, Math.atan2(camPos.x - p.x, camPos.z - p.z), 0);
   if (o.parent && o.parent !== scene) {
     // undo parent rotation so the panel still faces the viewer
-    const pq = o.parent.getWorldQuaternion(new THREE.Quaternion()).invert();
-    o.quaternion.premultiply(pq);
+    o.quaternion.premultiply(o.parent.getWorldQuaternion(_yq).invert());
   }
 }
 
@@ -725,10 +861,12 @@ renderer.setAnimationLoop(() => {
   if (debug.frameTimes.length > 2000) debug.frameTimes.shift();
   last = now;
   const dt = Math.min(clock.getDelta(), 0.1) * (debug.speed || 1);
-  if (debug.ready) step(dt);
+  if (debug.ready) { const t0 = performance.now(); step(dt); debug.stepMs = debug.stepMs * 0.9 + (performance.now() - t0) * 0.1; }
   renderer.info.reset();
+  const r0 = performance.now();
   if (post && !renderer.xr.isPresenting) post.render();
   else renderer.render(scene, camera);
+  debug.renderMs = performance.now() - r0;
   debug.drawCalls = renderer.info.render.calls;
   debug.triangles = renderer.info.render.triangles;
 });
@@ -754,12 +892,38 @@ Object.assign(debug, {
   player: () => ({ pos: player.position.toArray(), yaw: player.rotation.y }),
   worldToRig: (p) => { player.updateMatrixWorld(); return new THREE.Vector3(...p).applyMatrix4(player.matrixWorld.clone().invert()).toArray(); },
   camera: () => ({ pos: camera.position.toArray(), focus: cam.focus.toArray(), r: cam.r }),
-  menuButtonWorld: (id) => {
-    const b = menu.buttons.find((x) => x.id === id);
-    if (!b) return null;
-    const g = menu.mesh.geometry.parameters;
-    const p = new THREE.Vector3(((b.x + b.w / 2) / menu.canvas.width - 0.5) * g.width, (0.5 - (b.y + b.h / 2) / menu.canvas.height) * g.height, 0);
-    return p.applyMatrix4(menu.mesh.matrixWorld).toArray();
+  menuButtonWorld: (id) => { menu.mesh.updateWorldMatrix(true, false); const p = menu.buttonWorld(id); return p && p.toArray(); },
+  vrStart: () => { if (menu.isOpen) menuAction('primary'); },
+  controllers: () => controllers.map((c) => ({ hand: c.userData.hand, model: !!(c.userData.model.motionController && c.userData.model.children.length),
+    body: c.userData.body.visible, label: !!(c.userData.label && c.userData.label.mesh.visible) })),
+  hudStill: () => !hud.turning && !hud.moving,
+  menuButtons: () => menu.buttons.map((b) => ({ id: b.id, label: b.label })),
+  // distance (display m) between the "pick this photon" ring and the photon it marks
+  ringOffset: () => {
+    const room = levels[0];
+    room.ui.updateWorldMatrix(true, true);
+    const r = new THREE.Vector3().setFromMatrixPosition(room.ring.matrixWorld);
+    return { d: r.distanceTo(room.photonPos.clone().applyMatrix4(room.offset.matrixWorld)), visible: room.ring.visible };
+  },
+  xrHead: () => ({ pos: xr.head.toArray(), yaw: xr.yaw, valid: xr.valid, placed: xr.placed }),
+  // Where something appears from the eyes: azimuth (+ right) and elevation (+ up) relative to the gaze, in degrees, and distance.
+  // Also whether a panel faces the eyes (cosine between its normal and the direction to the eyes).
+  xrView: (what) => {
+    let p, n = null;
+    if (what === 'anchor') p = anchorWorld.clone();
+    else {
+      const o = scene.getObjectByName(what);
+      if (!o) return null;
+      o.updateWorldMatrix(true, false);
+      p = new THREE.Vector3().setFromMatrixPosition(o.matrixWorld);
+      n = new THREE.Vector3(0, 0, 1).transformDirection(o.matrixWorld);
+      if (!o.visible) return { hidden: true };
+    }
+    const d = p.clone().sub(xr.head);
+    const fwd = new THREE.Vector3(-Math.sin(xr.yaw), 0, -Math.cos(xr.yaw)), right = new THREE.Vector3(Math.cos(xr.yaw), 0, -Math.sin(xr.yaw));
+    const f = d.dot(fwd), r = d.dot(right);
+    return { az: Math.atan2(r, f) * 57.2958, el: Math.atan2(d.y, Math.hypot(f, r)) * 57.2958, dist: d.length(),
+      facing: n ? n.dot(d.clone().negate().normalize()) : null };
   },
   labelText: () => (labelPanel.mesh.visible ? labelPanel.key : ''),
   setSpeed: (k) => { debug.speed = k; },

@@ -98,3 +98,4 @@ body.xr-capable .ctl-vr { display: block; }
   #toolbar button { font-size: 12px; padding: 5px 8px; }
   #toolbar #tb-voice, #toolbar #tb-mode { display: none; }
 }
+#stats { position: fixed; left: 8px; bottom: 8px; z-index: 50; font: 12px/1.35 ui-monospace, monospace; color: #b8f5c8; background: rgba(0,0,0,0.7); padding: 6px 8px; border-radius: 6px; white-space: pre; pointer-events: none; }

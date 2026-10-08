@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { Level, sphereHit, meshHit } from '../level.js';
 import { Ribbons, GlowPoints, solidMaterial, textSprite } from '../gfx.js';
+import { clipMaterial } from '../clip.js';
 import { Batch, rng } from '../build.js';
 import { fmt } from '../data.js';
 import { smooth, levelScale } from '../journey.js';
@@ -29,11 +30,10 @@ export class RoomLevel extends Level {
       m.traverse((o) => {
         if (!o.isMesh) return;
         if (/laser/i.test(o.name)) { // alignment lasers: pure emissive light
-          const lm = new THREE.MeshBasicMaterial({ color: 0x22c95e, toneMapped: false, transparent: true });
+          const lm = clipMaterial(new THREE.MeshBasicMaterial({ color: 0x22c95e, toneMapped: false, transparent: true }));
           o.material = lm; this.fade(lm); return;
         }
-        const mat = new THREE.MeshBasicMaterial({ map: o.material.map, color: 0xc4c4c4, toneMapped: false });
-        mat.transparent = true;
+        const mat = clipMaterial(new THREE.MeshBasicMaterial({ map: o.material.map, color: 0xc4c4c4, toneMapped: false, transparent: true }));
         o.material = mat;
         this.fade(mat);
       });
@@ -47,7 +47,7 @@ export class RoomLevel extends Level {
         body.traverse((o) => { if (o.isMesh) o.material = bm; });
         this.fade(bm);
         content.add(body);
-        this.pickables.push({ hit: meshHit(body), label: 'The patient, lying on their back with the prostate at the isocentre. Body surface from MakeHuman (CC0).' });
+        this.pickables.push({ hit: meshHit(body), priority: 0.5, label: 'The patient, lying on their back with the prostate at the isocentre. Body surface from MakeHuman (CC0).' });
       }
     } else {
       const b = new Batch();
@@ -79,7 +79,7 @@ export class RoomLevel extends Level {
       this.fade(mesh.material);
       this.roomMesh = mesh;
     }
-    this.pickables.push({ hit: meshHit(this.roomMesh), label: 'Treatment room: a generic medical linear accelerator at gantry 0°, beam pointing straight down. Isocentre 100 cm from the X-ray target.' });
+    this.pickables.push({ hit: meshHit(this.roomMesh), priority: 0, label: 'Treatment room: a generic medical linear accelerator at gantry 0°, beam pointing straight down. Isocentre 100 cm from the X-ray target.' });
 
     // ---- beam: photon streaks from the target through a 10 × 10 cm field
     const r = rng(7);
@@ -126,7 +126,8 @@ export class RoomLevel extends Level {
   update(lt, ctx) {
     const waiting = !ctx.selected && lt > 10.5;
     const ws = levelScale(this.unit, ctx.z ?? 0);
-    const pd = this.photonPos.clone().sub(this.anchorShown || this.anchor).multiplyScalar(ws);
+    // the ring sits in the (scaled) ui group: express the photon's display offset in its units
+    const pd = this.photonPos.clone().sub(this.anchorShown || this.anchor).multiplyScalar(ws / this.uiScale);
     const ringPulse = 1 + 0.18 * Math.sin((ctx.time || 0) * 4);
     this.ring.position.copy(pd);
     this.ring.scale.setScalar(ringPulse);
