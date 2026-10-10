@@ -33,7 +33,7 @@ const _m = new THREE.Matrix4(), _inv = new THREE.Matrix4(), _r = new THREE.Ray()
 // ------------------------------------------------------------------ menu / welcome panel
 export class VRMenu {
   constructor() {
-    const { canvas, ctx, mesh, tex } = canvasMesh(1100, 900, 0.54);
+    const { canvas, ctx, mesh, tex } = canvasMesh(1100, 900, 0.5);
     Object.assign(this, { canvas, ctx, mesh, tex });
     this.mesh.visible = false;
     this.mesh.name = 'vr-menu';
@@ -52,12 +52,12 @@ export class VRMenu {
     const s = this.state;
     const primary = this.welcome ? 'Start' : s.paused ? 'Resume' : 'Close menu';
     this.buttons = [
-      { id: 'primary', label: primary, x: 60, y: 610, w: 980, h: 96, primary: true },
-      { id: 'mode', label: s.mode === 'guided' ? 'Mode: Guided' : 'Mode: Explore', x: 60, y: 722, w: 315, h: 80 },
-      { id: 'voice', label: s.voice ? 'Narration: on' : 'Narration: off', x: 392, y: 722, w: 315, h: 80 },
-      { id: 'recenter', label: 'Recenter', x: 724, y: 722, w: 316, h: 80 },
-      { id: 'restart', label: 'Restart', x: 60, y: 814, w: 480, h: 64 },
-      { id: 'exit', label: 'Exit VR', x: 560, y: 814, w: 480, h: 64 },
+      { id: 'primary', label: primary, x: 50, y: 556, w: 1000, h: 112, primary: true },
+      { id: 'mode', label: s.mode === 'guided' ? 'Guided' : 'Explore', x: 50, y: 684, w: 323, h: 96 },
+      { id: 'voice', label: s.voice ? 'Voice on' : 'Voice off', x: 389, y: 684, w: 322, h: 96 },
+      { id: 'recenter', label: 'Recenter', x: 727, y: 684, w: 323, h: 96 },
+      { id: 'restart', label: 'Restart', x: 50, y: 796, w: 492, h: 80 },
+      { id: 'exit', label: 'Exit VR', x: 558, y: 796, w: 492, h: 80 },
     ];
   }
 
@@ -68,30 +68,29 @@ export class VRMenu {
     c.fillStyle = 'rgba(6,9,13,0.95)'; roundRect(c, 4, 4, W - 8, H - 8, 28); c.fill();
     c.strokeStyle = 'rgba(232,237,242,0.18)'; c.lineWidth = 3; c.stroke();
     c.textBaseline = 'alphabetic'; c.textAlign = 'left';
-    c.fillStyle = INK; c.font = `300 58px ${FONT}`;
-    c.fillText(this.welcome ? 'Nine Orders' : 'Menu', 60, 100);
-    c.fillStyle = DIM; c.font = `400 28px ${FONT}`;
-    c.fillText(this.welcome ? 'One photon, from the linac to a break in DNA. Every track is simulated.'
-      : s.mode === 'guided' ? 'Guided: the story plays by itself. Explore: you choose the scale.' : 'Explore: you choose the scale. Guided: the story plays by itself.', 60, 148);
+    c.fillStyle = INK; c.font = `400 66px ${FONT}`;
+    c.fillText(this.welcome ? 'Nine Orders' : 'Menu', 56, 104);
+    c.fillStyle = DIM; c.font = `400 32px ${FONT}`;
+    c.fillText(this.welcome ? 'One photon, from the linac to a break in DNA.' : s.mode === 'guided' ? 'Guided: the story plays by itself.' : 'Explore: you choose the scale.', 56, 154);
     const rows = [
       ['Left stick', 'walk'],
-      ['Right stick', s.mode === 'guided' ? 'up/down: fast-forward or rewind · left/right: turn' : 'up/down: zoom in or out · left/right: turn'],
-      ['Trigger', 'select the glowing photon · pause and label anything'],
-      ['Grip', 'hold to grab the scene: move it, turn it'],
+      ['Right stick', s.mode === 'guided' ? '↕ forward / back   ↔ turn' : '↕ zoom   ↔ turn'],
+      ['Trigger', 'select · pause and label'],
+      ['Grip', 'hold to grab the scene'],
       ['B or Y', 'this menu'],
     ];
     rows.forEach(([k, v], i) => {
-      const y = 228 + i * 70;
-      c.fillStyle = ACC; c.font = `600 30px ${FONT}`; c.fillText(k, 60, y);
-      c.fillStyle = INK; c.font = `400 29px ${FONT}`; c.fillText(v, 270, y);
+      const y = 232 + i * 70;
+      c.fillStyle = ACC; c.font = `600 40px ${FONT}`; c.fillText(k, 56, y);
+      c.fillStyle = INK; c.font = `400 40px ${FONT}`; c.fillText(v, 330, y);
     });
     this.buttons.forEach((b) => {
       c.fillStyle = b.primary ? 'rgba(255,179,92,0.25)' : 'rgba(232,237,242,0.07)';
       roundRect(c, b.x, b.y, b.w, b.h, 16); c.fill();
       c.strokeStyle = b.primary ? ACC : 'rgba(232,237,242,0.25)'; c.lineWidth = 2; c.stroke();
       c.fillStyle = INK; c.textAlign = 'center';
-      c.font = b.primary ? `600 40px ${FONT}` : `500 30px ${FONT}`;
-      c.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2 + (b.primary ? 14 : 10));
+      c.font = b.primary ? `600 50px ${FONT}` : `500 40px ${FONT}`;
+      c.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2 + (b.primary ? 17 : 14));
       c.textAlign = 'left';
     });
     this.tex.needsUpdate = true;
@@ -102,8 +101,8 @@ export class VRMenu {
   open(welcome, state, head, yaw) {
     this.welcome = welcome;
     this.state = { ...state };
-    const d = 0.8;
-    this.mesh.position.set(head.x - Math.sin(yaw) * d, head.y - 0.1, head.z - Math.cos(yaw) * d);
+    const d = 0.6; // within arm's reach: big, legible, easy to point at
+    this.mesh.position.set(head.x - Math.sin(yaw) * d, head.y - 0.12, head.z - Math.cos(yaw) * d);
     _m.lookAt(head, this.mesh.position, UP); // +z towards the eyes
     this.mesh.quaternion.setFromRotationMatrix(_m);
     this.mesh.visible = true;

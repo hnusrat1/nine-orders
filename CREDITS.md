@@ -36,5 +36,5 @@ Geant4-DNA references (as required by the Geant4-DNA collaboration): *Med Phys* 
 
 ## Original models
 
-- `assets/models/room.glb` (room, generic linear accelerator, couch; lighting baked in Blender) is original work for this project, by `sim/art/room.py`. It is vendor-neutral and not a model of any product.
+- `assets/models/room.glb` (room with sky ceiling and maze, generic linear accelerator, couch and immobilisation, patient gown and blanket, in-room monitors; lighting baked in Blender with Cycles and denoised with OpenImageDenoise) is original work for this project, by `sim/art/room.py`. It is vendor-neutral and not a model of any product. The sky panels' clouds are procedural noise.
 - Cells, chromatin territories, nucleosome packing and all tracks are procedural or simulated.

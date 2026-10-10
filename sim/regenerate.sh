@@ -37,6 +37,9 @@ $PY select_event.py
 step "patient scale: dose and electron fluence at the target"
 ./build/nine_patient macros/patient_fluence.mac > work/runs/patient_fluence.log 2>&1
 
+step "patient scale: dose in every voxel (about 18 minutes on 4 cores)"
+./build/nine_patient macros/patient_dose.mac > work/runs/patient_dose.log 2>&1
+
 step "cell and DNA scale (Geant4-DNA)"
 $PY run_dna.py 1000
 

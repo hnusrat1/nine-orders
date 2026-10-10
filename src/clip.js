@@ -47,7 +47,8 @@ export function clipMaterial(m) {
         gl_FragColor.a *= cf;
       }
       #include <premultiplied_alpha_fragment>`);
+    if (m.userData.extraCompile) m.userData.extraCompile(sh); // material-specific additions (e.g. the light field on skin)
   };
-  m.customProgramCacheKey = () => 'clip';
+  m.customProgramCacheKey = () => 'clip' + (m.userData.programKey || '');
   return m;
 }

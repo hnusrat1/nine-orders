@@ -15,6 +15,9 @@
 //   fluence — score, inside a sphere at the target, the energy deposited and the
 //             track length of electrons set in motion by photons (Compton,
 //             photoelectric, pair). Used for "tracks per nucleus per Gy".
+//   dose    — energy deposited in every voxel of the phantom (for the dose map
+//             shown on the CT-style slices). Voxel-by-voxel navigation, so a
+//             step never spans several voxels.
 #include "G4RunManagerFactory.hh"
 #include "G4UImanager.hh"
 #include "G4VUserDetectorConstruction.hh"
@@ -147,7 +150,7 @@ class Detector : public G4VUserDetectorConstruction {
     auto* voxS = new G4Box("Voxel", cfg.voxel / 2, cfg.voxel / 2, cfg.voxel / 2);
     auto* voxL = new G4LogicalVolume(voxS, soft, "Voxel");
     auto* voxP = new G4PVParameterised("Voxel", voxL, contL, kUndefined, n, param);
-    voxP->SetRegularStructureId(1);
+    if (cfg.mode != "dose") voxP->SetRegularStructureId(1);  // dose mode: stop at every voxel boundary
 
     auto* region = new G4Region("phantom");
     region->AddRootLogicalVolume(contL);
@@ -216,6 +219,7 @@ class Stepping : public G4UserSteppingAction {
  public:
   void UserSteppingAction(const G4Step* st) override {
     if (cfg.mode == "fluence") return fluence(st);
+    if (cfg.mode == "dose") return dose(st);
     G4Track* tr = st->GetTrack();
     auto* post = st->GetPostStepPoint();
     const G4VProcess* pr = post->GetProcessDefinedStep();
@@ -268,7 +272,21 @@ class Stepping : public G4UserSteppingAction {
 
   // --- fluence / dose scoring
   void fluence(const G4Step* st);
+  void dose(const G4Step* st);
 };
+
+// per-thread energy deposit per voxel (MeV), summed into doseTotal at the end of the run
+G4ThreadLocal std::vector<double>* doseBuf = nullptr;
+std::vector<double> doseTotal;
+
+void Stepping::dose(const G4Step* st) {
+  const G4double e = st->GetTotalEnergyDeposit();
+  if (e <= 0) return;
+  const G4VTouchable* th = st->GetPreStepPoint()->GetTouchable();
+  if (!th->GetVolume() || th->GetVolume()->GetName() != "Voxel") return;
+  if (!doseBuf) doseBuf = new std::vector<double>(size_t(cfg.nx) * cfg.ny * cfg.nz, 0.0);
+  (*doseBuf)[th->GetReplicaNumber(0)] += e / MeV;
+}
 
 struct Scores {
   G4Accumulable<G4double> edep{"edep", 0.}, lenPrimaryE{"lenPrimaryE", 0.}, lenAllE{"lenAllE", 0.};
@@ -330,6 +348,23 @@ class RunAct : public G4UserRunAction {
   void BeginOfRunAction(const G4Run*) override { G4AccumulableManager::Instance()->Reset(); }
   void EndOfRunAction(const G4Run* run) override {
     G4AccumulableManager::Instance()->Merge();
+    if (cfg.mode == "dose") {
+      if (!IsMaster()) {
+        if (!doseBuf) return;
+        G4AutoLock l(&outMutex);
+        if (doseTotal.empty()) doseTotal.assign(doseBuf->size(), 0.0);
+        for (size_t i = 0; i < doseBuf->size(); i++) doseTotal[i] += (*doseBuf)[i];
+        return;
+      }
+      std::vector<float> f(doseTotal.begin(), doseTotal.end());
+      std::ofstream b(cfg.out + ".bin", std::ios::binary);
+      b.write(reinterpret_cast<const char*>(f.data()), f.size() * sizeof(float));
+      std::ofstream o(cfg.out + ".json");
+      o << "{\"events\": " << run->GetNumberOfEvent() << ", \"n\": [" << cfg.nx << ", " << cfg.ny << ", " << cfg.nz
+        << "], \"voxel_mm\": " << cfg.voxel / mm << ", \"units\": \"MeV deposited per voxel, float32, copyNo order\"}\n";
+      G4cout << "dose results written to " << cfg.out << ".bin" << G4endl;
+      return;
+    }
     if (!IsMaster() || cfg.mode != "fluence") return;
     std::ofstream o(cfg.out + ".json");
     o.precision(10);

@@ -82,13 +82,18 @@ export class ScaleBar {
     this.group.add(this.label);
     this.text = '';
   }
-  update(z) {
+  // subtle: thinner and quieter (VR, where it sits a metre from the eyes); opacity 0 hides it
+  update(z, { subtle = false, opacity = 1 } = {}) {
     const sb = scaleBar(z);
-    const L = sb.display, t = 0.0035;
+    const L = sb.display, t = subtle ? 0.0018 : 0.0035;
     this.bar.scale.set(L, t, t); this.bar.position.set(0, 0, 0);
     this.capL.scale.set(t, t * 5, t); this.capL.position.set(-L / 2, 0, 0);
     this.capR.scale.set(t, t * 5, t); this.capR.position.set(L / 2, 0, 0);
-    this.label.position.set(0, -0.024, 0);
+    this.label.scale.setScalar(subtle ? 0.6 : 1);
+    this.label.position.set(0, subtle ? -0.015 : -0.024, 0);
+    this.bar.material.opacity = (subtle ? 0.45 : 0.85) * opacity;
+    this.label.material.opacity = (subtle ? 0.6 : 1) * opacity;
+    this.group.visible = opacity > 0.01;
     if (sb.text !== this.text) {
       this.text = sb.text;
       const c = this.canvas.getContext('2d');
@@ -109,6 +114,7 @@ export class Callout {
     this.canvas.width = width; this.canvas.height = 34 + lines * 40;
     this.mesh = panelMesh(this.canvas, height * (this.canvas.height / 194));
     this.mesh.userData.billboard = true;
+    this.mesh.userData.callout = true;
     this.key = '';
   }
   set(title, rows, accent = ACC) {

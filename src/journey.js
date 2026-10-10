@@ -29,7 +29,13 @@ export const STAGES = [
   { id: 'dna', num: 'Stage 6 of 6', name: 'DNA', scale: '1 nanometre', jumpT: 164, jumpZ: 8.9 },
 ];
 export const D0 = 0.25;
-export const levelScale = (unit, z) => unit * D0 * Math.pow(10, z);
+// Life-size start: at z = 0 the treatment room is drawn 1:1, so you stand in it.
+// The extra factor eases back to the D0 framing by z = LIFE_END, early in the
+// patient stage. It multiplies every level alike, so the zoom stays continuous.
+export const LIFE_END = 1.6;
+export function lifeFactor(z) { return Math.pow(1 / D0, 1 - smooth(z / LIFE_END)); }
+export const lifeAmount = (z) => (lifeFactor(z) - 1) / (1 / D0 - 1); // 1 at life size, 0 once eased out
+export const levelScale = (unit, z) => unit * D0 * Math.pow(10, z) * lifeFactor(z);
 
 export function levelWeight(range, z) {
   const [a, b, c, d] = range;
@@ -72,11 +78,12 @@ export function zAt(t) {
 // Nice scale-bar length for a given zoom: largest {1,2,5}·10^n metres whose
 // display length is at most `maxDisplay` metres.
 export function scaleBar(z, maxDisplay = 0.32) {
-  const realMax = maxDisplay / (D0 * Math.pow(10, z));
+  const k = D0 * Math.pow(10, z) * lifeFactor(z);
+  const realMax = maxDisplay / k;
   const e = Math.floor(Math.log10(realMax));
   let best = Math.pow(10, e);
   for (const m of [2, 5]) if (m * Math.pow(10, e) <= realMax) best = m * Math.pow(10, e);
-  return { metres: best, display: best * D0 * Math.pow(10, z), text: formatLength(best) };
+  return { metres: best, display: best * k, text: formatLength(best) };
 }
 
 export function formatLength(m) {

@@ -1,0 +1,22 @@
+# Patient scale, dose mode: energy deposited in every 2.5 mm voxel of the pelvis
+# for the 6 MV 10 × 10 cm AP field. Shown as the dose colour wash on the CT-style
+# slices at the patient scale.
+/control/verbose 1
+/run/verbose 1
+/run/numberOfThreads 4
+/nine/mode dose
+/nine/voxelBin work/pelvis_vox.bin
+/nine/spectrum work/inputs/mohan6.spectrum
+/nine/out work/runs/patient_dose
+/nine/nx 184
+/nine/ny 128
+/nine/nz 176
+/nine/voxel 2.5 mm
+/nine/origin -230 -150 -230 mm
+/nine/init
+/process/em/UseGeneralProcess false
+/run/initialize
+/run/setCut 0.7 mm
+/random/setSeeds 31415 92653
+/run/printProgress 1000000
+/run/beamOn 6000000

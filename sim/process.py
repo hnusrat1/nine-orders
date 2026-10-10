@@ -2,7 +2,7 @@
 
 Inputs (sim/work/): story.json, pelvis_vox.json, anatomy.json/.npz, dna_runs.json,
 runs/dna_delta_t*.bin, runs/dna_primary_t*.bin, dsb.json, chromatin.npz,
-runs/patient_fluence.json. Every number shown on screen is computed here and
+runs/patient_fluence.json, runs/patient_dose.bin/.json. Every number shown on screen is computed here and
 stored with its derivation in index.json "numbers"; the raw inputs to each
 number are stored in index.json "runs" so sim/check_physics.py can recompute
 them from committed files only.
@@ -228,6 +228,9 @@ def main():
     n["deltaHistories"] = num(dsb["n_histories"], "", "Geant4-DNA histories of the delta electron", "Histories in the option4 run", 4)
     n["placements"] = num(dsb["trials"], "", "Placements of delta tracks in the chromatin model", "histories × rotations", 5)
     n["fluencePhotons"] = num(flu["events"], "", "Photons in the dose/fluence run", "/run/beamOn in sim/macros/patient_fluence.mac", 7)
+    dm = dose_maps(C, vox)
+    datasets.update(dm["datasets"])
+    n.update(dm["numbers"])
     for i, s in enumerate(ssb_list):
         if i in pair_idx:
             key = "ssbA_eV" if s["strand"] == 0 else "ssbB_eV"
@@ -276,9 +279,11 @@ def main():
             "linkerLengths_bp": [int(x) for x in ch["lk_n"]],
             "dna": runs,
             "story": story_run(),
+            "dose": dm["run"],
         },
         "eventTypes": {"0": "elastic scattering", "1": "electronic excitation", "2": "ionisation", "3": "vibrational excitation", "4": "dissociative attachment",
                        "5": "thermalisation (solvation)", "6": "track start", "10": "condensed-history step (eIoni)", "11": "condensed-history step (msc / transport)", "12": "bremsstrahlung"},
+        "slices": dm["slices"],
         "notes": notes(n, dsb, runs, flu, segs),
         "sources": SOURCES,
         "datasets": datasets,
@@ -288,6 +293,85 @@ def main():
     print("wrote", OUT, {k: v["count"] for k, v in datasets.items()}, f"{total / 1024:.0f} KiB")
     for k, v in n.items():
         print(f"  {k:20s} {v['value']:.5g} {v['unit']}")
+
+
+MAT_DENSITY = [0.00120479, 1.03, 1.40, 1.0]  # g/cm3: G4_AIR, G4_TISSUE_SOFT_ICRP, BONE_AVG_1.40, G4_WATER (patient.cc)
+
+
+def dose_maps(C, vox):
+    """CT-style slices of the voxel phantom through the Compton point, with the
+    Geant4 dose of the whole 10 × 10 cm field (runs/patient_dose)."""
+    from scipy.ndimage import gaussian_filter
+    meta = json.load(open(os.path.join(W, "runs", "patient_dose.json")))
+    nx, ny, nz = vox["n"]; v = vox["voxel_mm"]; org = np.array(vox["origin_mm"], float)
+    mat = np.fromfile(os.path.join(W, "pelvis_vox.bin"), np.uint8).reshape(nz, ny, nx)
+    e = np.fromfile(os.path.join(W, "runs", "patient_dose.bin"), np.float32).reshape(nz, ny, nx).astype(np.float64)
+    rho = np.array(MAT_DENSITY)[mat]
+    gy = e * MEV_J / (rho * v ** 3 * 1e-6) / meta["events"]   # Gy per simulated photon (voxel mass: ρ · v³)
+    body = mat > 0
+    gy[~body] = 0
+    # light smoothing inside the body only (σ = 1 voxel), so the wash shows the dose, not the Monte Carlo noise
+    sm = gaussian_filter(gy, 1.0) / np.maximum(gaussian_filter(body.astype(float), 1.0), 1e-6)
+    sm[~body] = 0
+    dref = float(np.percentile(sm[body & (sm > 0)], 99.9))
+    rel = np.clip(sm / dref, 0, 1)
+    idx = lambda p: np.clip(((np.asarray(p) - org) / v).astype(int), 0, [nx - 1, ny - 1, nz - 1])
+    ic = idx(C)
+    # central axis (x = z = 0 in the phantom frame: through the isocentre), depth of the dose maximum below the skin
+    i0 = idx([0, 0, 0])
+    cax_m = mat[i0[2], :, i0[0]]
+    cax = gaussian_filter(gy[i0[2] - 2:i0[2] + 3, :, i0[0] - 2:i0[0] + 3].mean(axis=(0, 2)), 1.0)
+    ys = org[1] + (np.arange(ny) + 0.5) * v
+    skin = float(ys[np.nonzero(cax_m)[0].max()] + v / 2)          # anterior skin surface on the axis
+    k = int(np.argmax(np.where(cax_m > 0, cax, 0)))
+    if 0 < k < ny - 1:  # parabola through the peak
+        a, b, c = cax[k - 1], cax[k], cax[k + 1]
+        yk = ys[k] + 0.5 * v * (a - c) / (a - 2 * b + c)
+    else:
+        yk = ys[k]
+    dmax_depth = skin - yk
+    # dose per photon at the prostate centroid (1 cm sphere) → photons in a 2 Gy fraction
+    zz, yy, xx = np.meshgrid(*[org[i] + (np.arange(m) + 0.5) * v for i, m in ((2, nz), (1, ny), (0, nx))], indexing="ij")
+    sphere = (xx ** 2 + yy ** 2 + zz ** 2 <= 10.0 ** 2) & body
+    d_iso = float(gy[sphere].mean())
+    rel_c = float(rel[ic[2], ic[1], ic[0]])
+    ct = {0: 0, 1: 112, 2: 236, 3: 96}  # display grey per material (air, soft tissue, bone, urine)
+    lut = np.zeros(256, np.uint8)
+    for kk, g in ct.items():
+        lut[kk] = g
+    from scipy.ndimage import zoom
+    UP = 3  # display only: cubic upsampling so the 2.5 mm voxels do not show as stair steps
+
+    def plane(m2, d2):
+        g = np.clip(zoom(gaussian_filter(lut[m2].astype(float), 0.8), UP, order=3), 0, 255)  # rounded outline
+        d = np.clip(zoom(d2, UP, order=3), 0, 1)
+        return {"ct": ("u8", 1, np.round(g).astype(np.uint8).ravel()), "dose": ("u8", 1, np.round(255 * d).astype(np.uint8).ravel())}
+    ax = plane(mat[ic[2]], rel[ic[2]])                                # (ny, nx)·UP: rows y, columns x
+    sg = plane(mat[:, :, ic[0]].T, rel[:, :, ic[0]].T)                # (ny, nz)·UP: rows y, columns z
+    datasets = {
+        "sliceAxial": write_dataset(os.path.join(OUT, "sliceAxial.bin"), ax),
+        "sliceSagittal": write_dataset(os.path.join(OUT, "sliceSagittal.bin"), sg),
+    }
+    centre = lambda i, ax_: float(org[ax_] + (i + 0.5) * v - C[ax_])
+    slices = {
+        "axial": {"plane": "z", "at_mm": centre(ic[2], 2), "cols": "x", "rows": "y", "width": nx * UP, "height": ny * UP,
+                  "min_mm": [float(org[0] - C[0]), float(org[1] - C[1])], "size_mm": [nx * v, ny * v]},
+        "sagittal": {"plane": "x", "at_mm": centre(ic[0], 0), "cols": "z", "rows": "y", "width": nz * UP, "height": ny * UP,
+                     "min_mm": [float(org[2] - C[2]), float(org[1] - C[1])], "size_mm": [nz * v, ny * v]},
+        "ct": "display grey: 0 air, 112 soft tissue, 236 bone, 96 urine (materials of the simulation's voxel phantom)",
+        "dose": "dose relative to the 99.9th percentile in the body, 0–255, smoothed with a 2.5 mm Gaussian; both channels upsampled 3× (cubic) for display",
+    }
+    numbers = {
+        "dosePhotons": num(meta["events"], "", "Photons in the dose run", "/run/beamOn in sim/macros/patient_dose.mac (6 MV, 10 × 10 cm, every voxel scored)", 7),
+        "dmaxDepth": num(dmax_depth / 10, "cm", "Depth of maximum dose on the central axis", "Anterior skin to the peak of the smoothed central-axis dose (5 × 5 voxel column, Geant4 dose run)", 2),
+        "photonsPer2Gy": num(2.0 / d_iso, "", "Photons from the target for 2 Gy at the prostate",
+                             "2 Gy divided by the mean dose per photon in a 1 cm sphere at the prostate centroid (Geant4 dose run; photons aimed into the 10 × 10 cm field)", 2),
+        "doseAtInteraction": num(100 * rel_c, "%", "Dose at the interaction point, relative to the maximum", "Smoothed dose in the voxel containing the Compton point / 99.9th percentile in the body", 2),
+    }
+    run = {"events": meta["events"], "voxel_mm": v, "dref_Gy_per_photon": dref, "dIso_Gy_per_photon": d_iso, "skin_y_mm": skin, "peak_y_mm": float(yk),
+           "cax_Gy_per_photon": [float(x) for x in cax], "cax_material": [int(x) for x in cax_m], "y_mm": [float(x) for x in ys],
+           "densities_g_cm3": MAT_DENSITY}
+    return {"datasets": datasets, "numbers": numbers, "slices": slices, "run": run}
 
 
 def story_run():
@@ -318,6 +402,10 @@ def notes(n, dsb, runs, flu, segs):
             f"A {runs['primary_E_handoff_keV']:.0f} keV electron loses about {f('letPrimary', 2)} on average, about {f('ionsPerUm', 2)} ionisation per micrometre: across a 10 µm cell, a few dozen ionisations spread along a line. Clustered damage needs several ionisations within a few nanometres, which mostly happens along slow secondary electrons and at track ends, where the energy loss per unit length is much higher."]},
         {"h": "Tracks per nucleus", "p": [
             f"In a 1 cm-radius sphere of soft tissue in the prostate, Geant4 gives the dose and the track length of electrons set in motion by photons (Compton, photoelectric and pair production electrons, above the 0.1 mm production cut). Fluence per gray times 2 Gy times the cross-section of a {NUCLEUS_D_UM:g} µm nucleus gives about {n['tracksPerNucleus2Gy']['value']:,.0f} tracks. Delta electrons are not counted as separate tracks."]},
+        {"h": "Dose", "p": [
+            f"The colour wash at the patient scale is the dose of the whole 10 × 10 cm field from a separate Geant4 run of {n['dosePhotons']['value']:,.0f} photons that scored the energy deposited in every 2.5 mm voxel of the same phantom (0.7 mm production cut, voxel-by-voxel navigation), divided by each voxel's mass and lightly smoothed (2.5 mm Gaussian). Isodose lines are at 50, 70 and 90% of the maximum.",
+            f"On the central axis the dose peaks {f('dmaxDepth', 2)} below the skin. Dose per photon at the prostate gives about {n['photonsPer2Gy']['value']:.1e} photons from the target for a 2 Gy fraction; the separate fluence run agrees within its statistics.",
+            "The slices show the voxel phantom's materials (soft tissue, bone, urine), not a patient CT."]},
         {"h": "Known approximations", "p": [
             "DNA, histones and the cell are modelled as liquid water for the physics; only direct energy deposition is scored (no water radiolysis or radical attack, which in reality causes much of the damage from X-rays).",
             "The beam is a point source with a uniform 10 × 10 cm field and one spectrum everywhere (no flattening-filter softening off axis, no head scatter or electron contamination). The linac and room are generic and vendor-neutral.",

@@ -102,8 +102,8 @@ fs.mkdirSync(OUT, { recursive: true });
 await page.waitForFunction(() => window.__nine.state().menuOpen, null, { timeout: 5000 }).catch(() => {});
 let s0 = await st();
 if (s0.menuOpen && s0.paused) ok('welcome panel shown on entering VR (journey paused)'); else fail(`welcome panel not shown (menuOpen=${s0.menuOpen}, paused=${s0.paused})`);
-await expectView('vr-menu', { az: [-3, 3], el: [-12, -3], dist: [0.7, 0.9], facing: 0.98 }, 'welcome panel is straight ahead, just below eye level, facing you');
-await expectView('anchor', { az: [-3, 3], el: [-23, -14], dist: [0.9, 1.1] }, 'the particle is 1 m ahead, below eye level');
+await expectView('vr-menu', { az: [-3, 3], el: [-16, -5], dist: [0.5, 0.7], facing: 0.98 }, 'welcome panel is straight ahead, just below eye level, facing you');
+await expectView('anchor', { az: [-3, 3], el: [-26, -14], dist: [0.9, 1.1] }, 'the particle is 1 m ahead, below eye level');
 await expectView('vr-subtitles', { az: [-4, 4], el: [0, 12], dist: [1.1, 1.4] }, 'subtitles ahead, just above eye level');
 await expectView('vr-logstrip', { az: [-48, -28], el: [-12, 6] }, 'scale strip to the left');
 await page.screenshot({ path: path.join(OUT, 'vr-0-welcome.png') });
@@ -177,7 +177,7 @@ const s4o = await st();
 if (s4o.menuOpen && s4o.paused) ok('B opens the menu and pauses'); else fail(`B did not open the menu (open=${s4o.menuOpen}, paused=${s4o.paused})`);
 const prim = await page.evaluate(() => window.__nine.menuButtons().find((b) => b.id === 'primary').label);
 if (prim === 'Resume') ok('the menu offers Resume'); else fail(`menu primary button reads "${prim}"`);
-await expectView('vr-menu', { az: [-3, 3], el: [-12, -3], dist: [0.7, 0.9], facing: 0.98 }, 'after turning round, the menu opens in front of the new gaze');
+await expectView('vr-menu', { az: [-3, 3], el: [-16, -5], dist: [0.5, 0.7], facing: 0.98 }, 'after turning round, the menu opens in front of the new gaze');
 await page.screenshot({ path: path.join(OUT, 'vr-7-menu-turned.png') });
 await clickMenu('mode');
 if ((await st()).mode === 'explore') ok('menu Mode button switches to Explore'); else fail('menu Mode button did not switch mode');
@@ -202,7 +202,7 @@ await wait(300);
 await press('right', 'b-button'); await clickMenu('recenter');
 if ((await st()).menuOpen || (await st()).paused) fail('Recenter should close the menu and resume');
 await wait(200);
-await expectView('anchor', { az: [-3, 3], el: [-23, -14], dist: [0.9, 1.1] }, 'Recenter puts the particle back in front');
+await expectView('anchor', { az: [-3, 3], el: [-26, -14], dist: [0.9, 1.1] }, 'Recenter puts the particle back in front');
 
 // 7. Explore: the right stick zooms
 const e0 = await st();
@@ -239,7 +239,7 @@ await setHead([1.1, 1.62, 0.4], YAW0 + 0.9);
 await wait(200);
 await page.evaluate(() => window.__iwer.recenter());
 await wait(400);
-await expectView('anchor', { az: [-3, 3], el: [-23, -14], dist: [0.9, 1.1] }, 'after the headset recentres, the particle is in front again');
+await expectView('anchor', { az: [-3, 3], el: [-26, -14], dist: [0.9, 1.1] }, 'after the headset recentres, the particle is in front again');
 await page.waitForFunction(() => window.__nine.hudStill(), null, { timeout: 8000 }).catch(() => {});
 await expectView('vr-subtitles', { az: [-6, 6], el: [0, 12] }, 'and the subtitles too');
 

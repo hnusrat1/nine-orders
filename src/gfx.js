@@ -328,3 +328,23 @@ export const EVENT_COLORS = {
   11: [0.55, 0.6, 0.66], // msc / transportation
   12: [1.0, 0.9, 0.5],   // bremsstrahlung
 };
+
+// The treatment field as a faint volume of light: a square pyramid from the X-ray target
+// (src) through a field of half-width `half` at the isocentre, cut between heights yTop and yBot.
+// Returns {volume, edges} in the caller's units.
+export function fieldVolume(src, iso, half, yTop, yBot, edgeWidth, strength = 0.18) {
+  const sad = src.y - iso.y;
+  const corner = (y, sx, sz) => { const k = (src.y - y) / sad; return [iso.x + sx * half * k, y, iso.z + sz * half * k]; };
+  const cs = [[-1, -1], [1, -1], [1, 1], [-1, 1]], pos = [];
+  for (let i = 0; i < 4; i++) {
+    const [a, b] = [cs[i], cs[(i + 1) % 4]];
+    pos.push(...corner(yTop, ...a), ...corner(yTop, ...b), ...corner(yBot, ...b), ...corner(yTop, ...a), ...corner(yBot, ...b), ...corner(yBot, ...a));
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  const volume = new THREE.Mesh(g, fresnelMaterial({ color: 0xffd9a0, rim: 0.8, base: 0.05, strength, side: THREE.DoubleSide }));
+  volume.renderOrder = 5;
+  const edges = new Ribbons(concatSegments(cs.map(([sx, sz]) => polylineSegments([corner(yTop, sx, sz), corner(yBot, sx, sz)], null, [1, 0.86, 0.62], edgeWidth))));
+  return { volume, edges };
+}

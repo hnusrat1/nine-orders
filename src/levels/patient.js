@@ -1,7 +1,8 @@
 // Level 2 — patient, 10 cm. Units: mm, origin at the Compton interaction point.
 import * as THREE from 'three';
 import { Level, sphereHit, meshHit } from '../level.js';
-import { Ribbons, GlowPoints, fresnelMaterial, polylineSegments, concatSegments } from '../gfx.js';
+import { Ribbons, GlowPoints, fresnelMaterial, polylineSegments, concatSegments, solidMaterial, fieldVolume } from '../gfx.js';
+import { clipMaterial, CLIP, CLIP_GLSL } from '../clip.js';
 import { trackSegments } from '../tracks.js';
 import { Callout } from '../hud.js';
 import { fmt } from '../data.js';
@@ -12,6 +13,80 @@ const C_MM_PER_NS = 299.792458;
 export const COMPTON_LT = PHOTON_T1 - 24; // level-local time of the interaction (20 s)
 const ELECTRON_SHOW = 10;                  // seconds of story time to replay the electron track
 
+// How each structure looks: colour, roughness, opacity facing you and at the rim, draw order.
+const ANATOMY_LOOK = {
+  bone: { color: 0xe4d6bb, rough: 0.55, face: 0.95, rim: 1.0, order: 1, depthWrite: true },
+  prostate: { color: 0xc9545f, rough: 0.42, face: 0.92, rim: 1.0, order: 2, depthWrite: true, glow: 0x5a1a1e },
+  bladder: { color: 0xd8b85e, rough: 0.25, face: 0.42, rim: 0.85, order: 2, depthWrite: false },
+  rectum: { color: 0xaf7868, rough: 0.5, face: 0.78, rim: 0.95, order: 2, depthWrite: true },
+  organ: { color: 0xb08a80, rough: 0.5, face: 0.8, rim: 0.95, order: 2, depthWrite: true },
+};
+
+function anatomyMaterial(look) {
+  const m = clipMaterial(new THREE.MeshStandardMaterial({ color: look.color, roughness: look.rough, metalness: 0, transparent: true,
+    depthWrite: look.depthWrite, emissive: look.glow ?? 0x000000, envMapIntensity: look.env ?? 0.5 }));
+  m.userData.programKey = 'anat';
+  m.userData.extraCompile = (sh) => {
+    sh.uniforms.uFace = { value: look.face }; sh.uniforms.uRim = { value: look.rim };
+    sh.fragmentShader = 'uniform float uFace, uRim;\n' + sh.fragmentShader.replace('#include <premultiplied_alpha_fragment>', `{
+        float fr = pow(1.0 - abs(dot(normalize(normal), normalize(vViewPosition))), 2.2);
+        gl_FragColor.a *= mix(uFace, uRim, fr);
+        gl_FragColor.rgb += vec3(0.9, 0.95, 1.0) * fr * 0.08;
+      }
+      #include <premultiplied_alpha_fragment>`);
+  };
+  return m;
+}
+
+// CT grey (red channel) and relative dose (green) on one texture; dose as a colour wash with isodose lines.
+function doseSlice(set, sl) {
+  const w = sl.width, h = sl.height, px = new Uint8Array(w * h * 4);
+  for (let i = 0; i < w * h; i++) { px[4 * i] = set.ct[i]; px[4 * i + 1] = set.dose[i]; px[4 * i + 3] = 255; }
+  const tex = new THREE.DataTexture(px, w, h, THREE.RGBAFormat);
+  tex.magFilter = THREE.LinearFilter; tex.minFilter = THREE.LinearFilter; tex.needsUpdate = true;
+  return new THREE.ShaderMaterial({
+    uniforms: { ...CLIP, uTex: { value: tex }, uOpacity: { value: 1 }, uDose: { value: 0 }, uTexel: { value: new THREE.Vector2(w, h) } },
+    vertexShader: /* glsl */`
+      varying vec2 vUv; varying vec3 vW;
+      void main() { vUv = uv; vW = (modelMatrix * vec4(position, 1.0)).xyz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: /* glsl */`
+      uniform sampler2D uTex; uniform float uOpacity, uDose; uniform vec2 uTexel;
+      varying vec2 vUv; varying vec3 vW;
+      ${CLIP_GLSL}
+      vec3 wash(float t) { return clamp(vec3(1.5 - abs(4.0 * t - 3.0), 1.5 - abs(4.0 * t - 2.0), 1.5 - abs(4.0 * t - 1.0)), 0.0, 1.0); }
+      float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+      void main() {
+        vec4 s = texture2D(uTex, vUv);
+        float ct = s.r, d = s.g;
+        float edge = smoothstep(0.08, 0.3, ct);                   // air: the slice shows the body only
+        if (edge < 0.01) discard;
+        float grain = (hash(floor(vUv * uTexel * 2.0)) - 0.5) * 0.025; // a little CT-like grain
+        vec3 col = vec3(clamp(ct * 0.95 + grain, 0.0, 1.0));
+        float a = smoothstep(0.3, 0.6, d) * 0.42 * uDose;           // wash: only where the dose is high
+        col = mix(col, wash(d), a);
+        float lines = 0.0, fw = fwidth(d) * 0.9 + 1e-4;
+        for (int i = 0; i < 3; i++) {                                // isodose lines: 50, 70, 90 %
+          float L = 0.5 + 0.2 * float(i);
+          lines = max(lines, 1.0 - smoothstep(0.0, fw, abs(d - L)));
+        }
+        col = mix(col, wash(d) * 1.1, lines * 0.7 * uDose);
+        float alpha = uOpacity * clipFade(vW) * edge * 0.75;
+        if (alpha < 0.01) discard;
+        gl_FragColor = sRGBTransferEOTF(vec4(col, alpha));
+        #include <colorspace_fragment>
+      }`,
+    transparent: true, depthWrite: false, side: THREE.DoubleSide,
+  });
+}
+
+// 6e6 → "6 million", 3.76e13 → "4 × 10¹³"
+function fmtSci(entry) {
+  if (!entry) return '?';
+  const v = entry.value, e = Math.floor(Math.log10(v)), m = Math.round(v / 10 ** e);
+  if (e === 6) return `${m} million`;
+  return `${m} × 10${String(e).split('').map((c) => '⁰¹²³⁴⁵⁶⁷⁸⁹'[+c]).join('')}`;
+}
+
 export class PatientLevel extends Level {
   constructor(def, data, assets) {
     super(def);
@@ -20,9 +95,10 @@ export class PatientLevel extends Level {
     this.dirOut = new THREE.Vector3(...ix.photon.dirOut).normalize();
     this.src = new THREE.Vector3(...ix.geometry.source_mm);
 
-    // ---- anatomy: translucent rim-lit surfaces
+    // ---- anatomy: lit like an anatomy model: ivory bone, the organs in tissue colours, a glassy skin shell
     const anat = new THREE.Group();
     this.offset.add(anat);
+    this.anatMats = [];
     if (assets.pelvis) {
       // BodyParts3D organs and bones (CC BY-SA) and the MakeHuman body surface, in the isocentre frame (mm)
       const iso = new THREE.Vector3(...ix.geometry.iso_mm);
@@ -34,8 +110,16 @@ export class PatientLevel extends Level {
           if (!o.isMesh) return;
           const info = (ix.anatomy || []).find((a) => o.name === a.id || o.name.startsWith(a.id)) || fallback;
           const bone = /hip|femur|sacrum|l5/.test(info.id || '');
-          o.material = fresnelMaterial({ color: info.color, rim: info.rim ?? (bone ? 2.4 : 1.8), base: info.base ?? (info.id === 'prostate' ? 0.1 : 0.025),
-            strength: info.strength ?? (bone ? 0.55 : 0.85), side: THREE.FrontSide });
+          if (info.id === 'body') {
+            // the skin as a glassy shell: additive rim light only, so it never darkens what is inside
+            o.material = fresnelMaterial({ color: 0xe0b8a2, rim: 2.6, base: 0.0, strength: 0.4 });
+            o.renderOrder = 6;
+          } else {
+            const look = ANATOMY_LOOK[bone ? 'bone' : info.id] || ANATOMY_LOOK.organ;
+            o.material = anatomyMaterial(look);
+            o.renderOrder = look.order;
+            this.anatMats.push(o.material);
+          }
           this.fade(o.material);
           this.pickables.push({ hit: meshHit(o), label: info.label, priority: info.id === 'body' ? 0 : 0.5 });
         });
@@ -54,6 +138,39 @@ export class PatientLevel extends Level {
         if (a.id !== 'body') this.pickables.push({ hit: sphereHit(new THREE.Vector3(...a.center_mm), r), priority: 0.5, label: a.label });
       }
     }
+
+    // ---- the couch top under the patient (carbon fibre, as in the room)
+    const ct = ix.geometry.couchTop_mm, iso = new THREE.Vector3(...ix.geometry.iso_mm);
+    const couch = new THREE.Mesh(new THREE.BoxGeometry(530, 50, 900), solidMaterial({ color: 0x15171a, roughness: 0.45 }));
+    couch.position.set(iso.x, ct - 25, iso.z + 60);
+    this.offset.add(couch); this.fade(couch.material);
+
+    // ---- CT-style slices of the simulation's voxel phantom through the interaction point,
+    // with the dose of the whole 10 × 10 cm field from the Geant4 dose run as a colour wash
+    this.slices = [];
+    if (data.sets.sliceAxial && ix.slices) {
+      for (const [key, set] of [['axial', data.sets.sliceAxial], ['sagittal', data.sets.sliceSagittal]]) {
+        const sl = ix.slices[key];
+        const m = doseSlice(set, sl);
+        const g = new THREE.PlaneGeometry(sl.size_mm[0], sl.size_mm[1]);
+        const mesh = new THREE.Mesh(g, m);
+        const cx = sl.min_mm[0] + sl.size_mm[0] / 2, cy = sl.min_mm[1] + sl.size_mm[1] / 2;
+        if (key === 'axial') mesh.position.set(cx, cy, sl.at_mm);
+        else { mesh.position.set(sl.at_mm, cy, cx); mesh.rotation.y = -Math.PI / 2; }
+        mesh.renderOrder = 3;
+        this.offset.add(mesh);
+        m.userData.normal = key === 'axial' ? 'z' : 'x';
+        this.slices.push(m);
+        this.pickables.push({ hit: meshHit(mesh), priority: 0.4,
+          label: `${key === 'axial' ? 'Axial' : 'Sagittal'} slice through the voxel phantom the simulation used (2.5 mm voxels), with the dose of this 6 MV 10 × 10 cm beam from ${fmtSci(n.dosePhotons)} simulated photons. Dose peaks ${fmt(n.dmaxDepth)} under the skin.` });
+      }
+    }
+
+    // ---- the treatment field: a faint volume of light, 10 × 10 cm at the isocentre, diverging from the target
+    this._v = new THREE.Vector3(); this._q = new THREE.Quaternion();
+    const fv = fieldVolume(new THREE.Vector3(...ix.geometry.source_mm), iso, ix.geometry.field_mm[0] / 2, iso.y + 260, iso.y - 200, 0.5);
+    this.field = fv.volume; this.fieldEdges = fv.edges;
+    this.offset.add(this.field, this.fieldEdges);
 
     // ---- incoming photon path (source → interaction) and the photon itself
     this.inPath = new Ribbons(polylineSegments([this.src.toArray(), [0, 0, 0]], [0, 1], [1, 0.82, 0.55], 0.6));
@@ -125,5 +242,21 @@ export class PatientLevel extends Level {
     const fl = tl > 0 ? Math.exp(-tl * 1.5) : 0;
     this.flash.material.uniforms.uOpacity.value = w * fl;
     this.callout.opacity = w * smooth((tl - 0.6) / 0.8);
+    // the dose wash comes up after the interaction, with the narration
+    const dose = smooth((lt - 25) / 3);
+    // show the slice that faces you: axial when you look along the body, sagittal from the side
+    let face = 0.5;
+    if (ctx.camPos) {
+      this._v.copy(ctx.camPos).sub(this.root.position).applyQuaternion(this._q.copy(this.root.quaternion).invert());
+      face = smooth((Math.abs(this._v.z) / (Math.abs(this._v.x) + Math.abs(this._v.z) + 1e-6) - 0.35) / 0.3);
+    }
+    for (const m of this.slices) {
+      m.uniforms.uOpacity.value = w * 0.9 * (m.userData.normal === 'z' ? face : 1 - face);
+      m.uniforms.uDose.value = dose;
+    }
+    this.field.material.uniforms.uOpacity.value = w;
+    this.fieldEdges.material.uniforms.uOpacity.value = w * 0.35;
   }
+
+  setEnv(env) { for (const m of this.anatMats) { m.envMap = env; m.needsUpdate = true; } }
 }

@@ -1,14 +1,67 @@
 // Level 1 — treatment room, 1 m. Units: metres, origin at the Compton point.
 import * as THREE from 'three';
 import { Level, sphereHit, meshHit } from '../level.js';
-import { Ribbons, GlowPoints, solidMaterial, textSprite } from '../gfx.js';
-import { clipMaterial } from '../clip.js';
+import { Ribbons, GlowPoints, solidMaterial, textSprite, fieldVolume } from '../gfx.js';
+import { clipMaterial, setClip } from '../clip.js';
 import { Batch, rng } from '../build.js';
 import { fmt } from '../data.js';
 import { smooth, levelScale } from '../journey.js';
 import { photonRemaining } from './shared.js';
 
 const N_PHOTONS = 240;
+
+// Surface finish per baked material: roughness, and how strongly it mirrors the room.
+const ROOM_FINISH = {
+  default: { rough: 0.6, env: 0.25 },
+  floor: { rough: 0.3, env: 0.9 }, floorInlay: { rough: 0.35, env: 0.8 }, wall: { rough: 0.85, env: 0.15 }, wood: { rough: 0.45, env: 0.5 },
+  ceiling: { rough: 0.95, env: 0.05 }, sky: { rough: 1, env: 0 }, downlight: { rough: 1, env: 0 }, cove: { rough: 1, env: 0 },
+  lightTrim: { rough: 0.4, env: 0.4 }, shell: { rough: 0.2, env: 1.0 }, shellGrey: { rough: 0.3, env: 0.8 }, accent: { rough: 0.25, env: 0.9 },
+  dark: { rough: 0.35, env: 0.7 }, glass: { rough: 0.05, env: 1.2 }, metal: { rough: 0.3, env: 1.0 }, couchTop: { rough: 0.4, env: 0.7 },
+  couchFrame: { rough: 0.25, env: 0.9 }, foam: { rough: 0.9, env: 0.1 }, sheet: { rough: 0.95, env: 0.05 }, cabinet: { rough: 0.4, env: 0.6 },
+  red: { rough: 0.3, env: 0.8 }, yellow: { rough: 0.4, env: 0.6 }, maze: { rough: 0.9, env: 0.1 },
+};
+const ROOM_EXPOSURE = 0.75 * Math.pow(2, 1.3); // the atlas is baked 1.3 stops down (sim/art/room.py BAKE_EXPOSURE)
+
+// Skin, lit by the room's reflections, with the linac's light field (the 10 × 10 cm field and
+// its crosshair, projected from the target) and the green alignment lasers falling on it.
+function skinMaterial(bodyToRoom, src, iso) {
+  const m = clipMaterial(new THREE.MeshStandardMaterial({ color: 0xc79a82, roughness: 0.55, metalness: 0, envMapIntensity: 0.9, transparent: true }));
+  m.userData.programKey = 'skin';
+  m.userData.extraCompile = (sh) => {
+    sh.uniforms.uBodyToRoom = { value: bodyToRoom };
+    sh.uniforms.uSrc = { value: src.clone() };
+    sh.uniforms.uIso = { value: iso.clone() };
+    sh.uniforms.uField = { value: 0.0 };
+    sh.uniforms.uLaser = { value: 1.0 };
+    m.userData.shader = sh;
+    sh.vertexShader = 'uniform mat4 uBodyToRoom; varying vec3 vRoom; varying vec3 vRoomN;\n' + sh.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
+      vRoom = (uBodyToRoom * vec4(transformed, 1.0)).xyz;
+      vRoomN = normalize(mat3(uBodyToRoom) * objectNormal);`);
+    sh.fragmentShader = 'uniform vec3 uSrc, uIso; uniform float uField, uLaser; varying vec3 vRoom; varying vec3 vRoomN;\n'
+      + sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+      {
+        vec3 n = normalize(vRoomN);
+        // light field: project this point from the target onto the isocentre plane
+        vec3 d = vRoom - uSrc;
+        float t = (uIso.y - uSrc.y) / d.y;
+        vec2 q = vec2(uSrc.x + d.x * t - uIso.x, uSrc.z + d.z * t - uIso.z);
+        float aa = max(fwidth(q.x), fwidth(q.y)) * 1.5;
+        float inside = (1.0 - smoothstep(0.05 - aa, 0.05 + aa, abs(q.x))) * (1.0 - smoothstep(0.05 - aa, 0.05 + aa, abs(q.y)));
+        float hair = min(smoothstep(0.0007, 0.0007 + aa, abs(q.x)), smoothstep(0.0007, 0.0007 + aa, abs(q.y)));
+        float facing = max(dot(n, -normalize(d)), 0.0);
+        totalEmissiveRadiance += diffuseColor.rgb * vec3(1.0, 0.93, 0.78) * (uField * 1.6 * inside * hair * facing);
+        // lasers: the three planes through the isocentre
+        vec3 r = vRoom - uIso;
+        float w = 0.0007;
+        float ls = 1.0 - smoothstep(w, w + fwidth(r.x) * 1.5, abs(r.x));
+        float lh = 1.0 - smoothstep(w, w + fwidth(r.y) * 1.5, abs(r.y));
+        float lc = 1.0 - smoothstep(w, w + fwidth(r.z) * 1.5, abs(r.z));
+        float laser = max(ls * max(n.y, 0.0), max(lh * abs(n.x), lc));
+        totalEmissiveRadiance += vec3(0.15, 1.0, 0.35) * laser * uLaser * 1.4;
+      }`);
+  };
+  return m;
+}
 
 export class RoomLevel extends Level {
   constructor(def, data, assets) {
@@ -24,17 +77,31 @@ export class RoomLevel extends Level {
     const content = new THREE.Group();
     this.offset.add(content);
     if (assets.room) {
-      // generic room and linac with lighting baked in Blender (sim/art/room.py): drawn unlit
+      // Room, linac and couch with lighting baked in Blender (sim/art/room.py). The bake is
+      // drawn as emission; reflections of the room itself (captured at load, see
+      // buildReflections) give glossy surfaces their sheen as you move.
       const m = assets.room.clone();
       m.position.set(iso.x, floorY, iso.z);
+      this.roomMats = [];
       m.traverse((o) => {
         if (!o.isMesh) return;
-        if (/laser/i.test(o.name)) { // alignment lasers: pure emissive light
+        const name = (o.material.name || '').replace(/\.\d+$/, '');
+        if (/laser/i.test(o.name) || name === 'laser') { // alignment lasers: pure emissive light
           const lm = clipMaterial(new THREE.MeshBasicMaterial({ color: 0x22c95e, toneMapped: false, transparent: true }));
           o.material = lm; this.fade(lm); return;
         }
-        const mat = clipMaterial(new THREE.MeshBasicMaterial({ map: o.material.map, color: 0xc4c4c4, toneMapped: false, transparent: true }));
+        if (name === 'screen') { // in-room monitors: their own display image
+          const sm = clipMaterial(new THREE.MeshBasicMaterial({ map: o.material.map, color: 0x9aa4b0, toneMapped: false, transparent: true }));
+          o.material = sm; this.fade(sm); return;
+        }
+        if (!o.geometry.attributes.normal) o.geometry.computeVertexNormals(); // lit materials need normals
+        const f = ROOM_FINISH[name] || ROOM_FINISH.default;
+        const mat = clipMaterial(new THREE.MeshStandardMaterial({
+          color: 0x000000, emissive: 0xffffff, emissiveMap: o.material.map, emissiveIntensity: ROOM_EXPOSURE,
+          roughness: f.rough, metalness: 0, envMapIntensity: f.env, transparent: true,
+        }));
         o.material = mat;
+        this.roomMats.push(mat);
         this.fade(mat);
       });
       content.add(m);
@@ -43,8 +110,13 @@ export class RoomLevel extends Level {
         const body = assets.body.clone();
         body.scale.setScalar(1e-3);
         body.position.copy(iso);
-        const bm = solidMaterial({ color: 0xb9ada3, roughness: 0.85 });
+        body.updateMatrixWorld(true);
+        let bodyMesh = null;
+        body.traverse((o) => { if (o.isMesh && !bodyMesh) bodyMesh = o; });
+        const bm = skinMaterial(bodyMesh.matrixWorld.clone(), this.src, iso); // mesh → room coordinates
         body.traverse((o) => { if (o.isMesh) o.material = bm; });
+        this.skin = bm;
+        this.roomMats.push(bm);
         this.fade(bm);
         content.add(body);
         this.pickables.push({ hit: meshHit(body), priority: 0.5, label: 'The patient, lying on their back with the prostate at the isocentre. Body surface from MakeHuman (CC0).' });
@@ -99,6 +171,13 @@ export class RoomLevel extends Level {
     this.fade(this.beam.material);
     this.beamA = a; this.beamB = bb;
 
+    // ---- the light field: a faint pyramid of light from the collimator to the patient
+    {
+      const fv = fieldVolume(this.src, iso, g.field_mm[0] * 0.5e-3, iso.y + 0.4, iso.y + 0.08, 0.0006, 0.14);
+      this.field = fv.volume; this.fieldEdges = fv.edges;
+      content.add(this.field, this.fieldEdges);
+    }
+
     // ---- the chosen photon (its true incoming direction from the simulation)
     this.dirIn = new THREE.Vector3(...data.index.photon.dirIn).normalize();
     this.photon = new GlowPoints({ pos: new Float32Array(3), color: new Float32Array([1, 0.85, 0.55]), size: new Float32Array([0.02]), minAngle: 0.006 });
@@ -123,7 +202,31 @@ export class RoomLevel extends Level {
     this.ui.add(this.ring, this.prompt);
   }
 
+  // Capture the room once from above the couch and use it as every room surface's
+  // reflection (and the skin's ambient light), so the lighting all agrees.
+  buildReflections(renderer) {
+    if (!this.roomMats) return;
+    const holder = this.roomMesh.parent, tmp = new THREE.Scene();
+    tmp.add(this.roomMesh);
+    const rt = new THREE.WebGLCubeRenderTarget(256, { type: THREE.HalfFloatType });
+    const cam = new THREE.CubeCamera(0.05, 40, rt);
+    cam.position.set(this.roomMesh.position.x, this.iso.y + 0.4, this.iso.z + 0.6);
+    setClip(new THREE.Vector3(), { r: [1e4, 2e4], near: [0, 1e-4] });
+    cam.update(renderer, tmp);
+    holder.add(this.roomMesh);
+    const pm = new THREE.PMREMGenerator(renderer);
+    const env = pm.fromCubemap(rt.texture).texture;
+    for (const m of this.roomMats) { m.envMap = env; m.needsUpdate = true; }
+    rt.dispose(); pm.dispose();
+    this.env = env;
+  }
+
   update(lt, ctx) {
+    // the light field shows the beam's shape on the skin once time has stopped
+    const fieldOn = smooth((lt - 7) / 3);
+    if (this.skin && this.skin.userData.shader) this.skin.userData.shader.uniforms.uField.value = 0.75 * fieldOn;
+    this.field.material.uniforms.uOpacity.value = this.weight * fieldOn;
+    this.fieldEdges.material.uniforms.uOpacity.value = this.weight * fieldOn * 0.3;
     const waiting = !ctx.selected && lt > 10.5;
     const ws = levelScale(this.unit, ctx.z ?? 0);
     // the ring sits in the (scaled) ui group: express the photon's display offset in its units

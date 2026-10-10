@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { loadData } from './data.js';
 import { loadAssets } from './assets.js';
-import { LEVELS, KEYS, T_END, STORY_START, STORY_LEN, STAGES, Z_MIN, Z_MAX, zAt, smooth } from './journey.js';
+import { LEVELS, KEYS, T_END, STORY_START, STORY_LEN, STAGES, Z_MIN, Z_MAX, zAt, smooth, lifeAmount } from './journey.js';
 import { RoomLevel } from './levels/room.js';
 import { PatientLevel } from './levels/patient.js';
 import { TissueLevel } from './levels/tissue.js';
@@ -88,6 +88,7 @@ const hint = $('hint');
 async function boot() {
   $('status').textContent = 'Loading data…';
   data = await loadData();
+  ISO_HEIGHT = data.index.geometry.isoHeight_mm / 1000;
   $('intro-facts').innerHTML = introHTML(data);
   const assets = await loadAssets(data.index);
   for (const def of LEVELS) {
@@ -109,6 +110,8 @@ async function boot() {
   $('status').textContent = '';
   buildProgress();
   buildVRFurniture();
+  levels[0].buildReflections(renderer);
+  if (levels[0].env) levels[1].setEnv(levels[0].env);
   debug.levels = levels;
   applyFrame(0);
   warmUp();
@@ -462,10 +465,15 @@ function readHead() {
 // The stage: the particle 0.95 m in front of the eyes and about 19° below them,
 // turned to face you. Called on entering VR, from Recenter, and when the
 // headset's own recentre (hold the Meta button) resets the reference space.
+// Standing, the isocentre goes at its real height, so the life-size room's floor
+// is your floor; seated, it goes a little below the eyes. You face the patient's
+// side (the room is turned 90°), as a therapist would standing at the couch.
 const STAGE_DIST = 0.95, STAGE_DROP = 0.32;
+let ISO_HEIGHT = 1.25; // replaced by the data's value at boot
 function placeStage() {
-  anchorWorld.set(xr.head.x - Math.sin(xr.yaw) * STAGE_DIST, Math.min(1.7, Math.max(0.5, xr.head.y - STAGE_DROP)), xr.head.z - Math.cos(xr.yaw) * STAGE_DIST);
-  userQuat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), xr.yaw);
+  const y = xr.head.y > ISO_HEIGHT + 0.2 ? Math.max(ISO_HEIGHT, xr.head.y - 0.5) : Math.max(0.5, xr.head.y - STAGE_DROP);
+  anchorWorld.set(xr.head.x - Math.sin(xr.yaw) * STAGE_DIST, y, xr.head.z - Math.cos(xr.yaw) * STAGE_DIST);
+  userQuat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), xr.yaw - Math.PI / 2);
   hudSnap();
 }
 
@@ -480,7 +488,24 @@ const hud = { rig: new THREE.Group(), yaw: 0, pos: new THREE.Vector3(), turning:
 hud.rig.name = 'vr-hud';
 hud.rig.visible = false;
 player.add(hud.rig, menu.mesh);
-let logVR = null, statsVR = null, vignette = null;
+let logVR = null, statsVR = null, vignette = null, callouts = [];
+const infoSlot = new THREE.Group();
+// In VR the callouts dock in a column to the right of the scene; on desktop they float beside the particle.
+function dockCallouts(inXR) {
+  let y = 0;
+  for (const c of callouts) {
+    if (inXR) {
+      if (c.m.parent !== infoSlot) { infoSlot.add(c.m); c.m.rotation.set(0, 0, 0); c.m.scale.setScalar(0.5); }
+      c.m.visible = c.L.weight > 0.3 && c.m.material.opacity > 0.01;
+      if (!c.m.visible) continue;
+      const h = c.m.geometry.parameters.height * 0.5;
+      c.m.position.set(0, -y - h / 2, 0);
+      y += h + 0.012;
+    } else if (c.m.parent !== c.L.ui) {
+      c.L.ui.add(c.m); c.m.position.copy(c.home); c.m.scale.setScalar(1);
+    }
+  }
+}
 function buildVRFurniture() {
   subsPanel.mesh.position.set(0, 0.11, -1.25);
   subsPanel.mesh.name = 'vr-subtitles';
@@ -491,6 +516,12 @@ function buildVRFurniture() {
   logVR.mesh.rotation.y = 0.66;
   logVR.mesh.name = 'vr-logstrip';
   hud.rig.add(subsPanel.mesh, titleCard.mesh, logVR.mesh);
+  // numbers (the levels' callouts) are read off to the right in VR, not floated in front of the scene
+  infoSlot.position.set(Math.sin(0.62) * 1.0, 0.06, -Math.cos(0.62) * 1.0);
+  infoSlot.rotation.y = -0.62;
+  infoSlot.name = 'vr-info';
+  hud.rig.add(infoSlot);
+  callouts = levels.flatMap((L) => L.ui.children.filter((o) => o.userData.callout).map((m) => ({ m, L, home: m.position.clone() })));
   if (params.has('stats')) {
     statsVR = new StatsPanel();
     statsVR.mesh.position.set(0.42, -0.3, -0.9);
@@ -751,7 +782,7 @@ function step(dt) {
 
 function applyFrame(dt) {
   const z = S.z;
-  const ctx = { dt, time: S.time, selected: S.selected, T: S.T, z };
+  const ctx = { dt, time: S.time, selected: S.selected, T: S.T, z, camPos: _camPos }; // camPos: last frame's eye position
   let dom = null, dw = 0;
   for (const L of levels) {
     const w = L.computeWeight(z);
@@ -773,21 +804,27 @@ function applyFrame(dt) {
   camera.updateMatrixWorld();
   const camPos = _camPos;
   if (inXR) camPos.copy(xr.head); else camPos.setFromMatrixPosition(camera.matrixWorld);
-  setClip(anchorWorld, inXR ? CLIP_VR : CLIP_DESKTOP);
+  // the diorama bubble opens up while the room is life-size
+  const life = lifeAmount(z), clipBase = inXR ? CLIP_VR : CLIP_DESKTOP;
+  _clipCfg.r[0] = clipBase.r[0] + life * 7; _clipCfg.r[1] = clipBase.r[1] + life * 11; _clipCfg.near = clipBase.near;
+  setClip(anchorWorld, _clipCfg);
 
   // billboards (callouts, labels) — yaw-only so the horizon stays level
   for (const L of levels) for (const o of L.ui.children) if (o.userData.billboard) yawFace(o, camPos);
   if (labelPanel.mesh.visible) yawFace(labelPanel.mesh, camPos);
 
   // scale bar under the anchor, facing the viewer
-  scaleBar.update(z);
+  scaleBar.update(z, { subtle: inXR, opacity: 1 - smooth(life * 3) });
   const toCam = _toCam.copy(camPos).sub(anchorWorld); toCam.y = 0; toCam.normalize();
   scaleBar.group.position.copy(anchorWorld).addScaledVector(toCam, 0.15);
   scaleBar.group.position.y -= inXR ? 0.3 : 0.27;
   yawFace(scaleBar.group, camPos);
 
   if (inXR) logVR.update(z); else logstrip.draw(z, S.dominant);
+  dockCallouts(inXR);
   if (statsVR || statsEl) updateStats();
+  // bloom is for the glowing tracks and points; the lit room would turn to haze
+  if (post) post.bloom.strength = 0.42 - 0.36 * levels[0].weight;
   ambient.update(levels, camPos, S.time);
   updateProgress();
 
@@ -810,7 +847,7 @@ function applyFrame(dt) {
   if (vd !== applyFrame.vd) { $('vignette').style.opacity = vd; applyFrame.vd = vd; }
   if (vignette) vignette.material.uniforms.uO.value = vo;
 }
-const _camPos = new THREE.Vector3(), _toCam = new THREE.Vector3();
+const _camPos = new THREE.Vector3(), _toCam = new THREE.Vector3(), _clipCfg = { r: [0, 0], near: [0, 0] };
 
 // ?stats: frame-time readout (in the headset, a small panel lower right)
 const statsEl = params.has('stats') ? Object.assign(document.createElement('div'), { id: 'stats' }) : null;

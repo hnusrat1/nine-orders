@@ -111,12 +111,14 @@ const ft = await page.evaluate(() => window.__nine.frameTimes.slice(-120));
 ft.sort((a, b) => a - b);
 console.log(`frame time (headless swiftshader, not representative of Quest): median ${ft[60].toFixed(1)} ms`);
 
-// Phone: touch viewport, tap to start, pinch to zoom (two synthetic touch pointers), tap to pause
+// Phone: touch viewport, tap to start, pinch to zoom (two synthetic touch pointers), tap to pause.
+// The desktop page is closed first: both share one software-rendered GPU here.
+await page.close();
 const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 phone.on('console', (m) => { if (m.type() === 'error') errors.push('phone console: ' + m.text()); });
 phone.on('pageerror', (e) => errors.push('phone pageerror: ' + e.message));
 await phone.goto(url + '/index.html', { timeout: 120000 });
-await phone.waitForFunction(() => window.__nine && window.__nine.ready, null, { timeout: 60000 });
+await phone.waitForFunction(() => window.__nine && window.__nine.ready, null, { timeout: 180000 });
 await phone.screenshot({ path: path.join(OUT, '9-phone-menu.png') });
 await phone.tap('#btn-start');
 await phone.evaluate(() => { window.__nine.setMode('explore'); window.__nine.setZ(4.8); });

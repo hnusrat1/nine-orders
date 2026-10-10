@@ -1,6 +1,14 @@
 // Narration script, subtitles and speech. Every number comes from index.numbers.
 import { fmt } from './data.js';
 
+// 3.76e13 → "4 × 10¹³", 6e6 → "6 million"
+function sci(entry) {
+  const v = entry.value, e = Math.floor(Math.log10(v)), m = Math.round(v / 10 ** e);
+  if (e === 6) return `${m} million`;
+  const sup = String(e).split('').map((c) => '⁰¹²³⁴⁵⁶⁷⁸⁹'[+c]).join('');
+  return `${m} × 10${sup}`;
+}
+
 export function script(n) {
   const sep = n.dsbSeparation && n.dsbSeparation.value > 0 ? `${fmt(n.dsbSeparation)} apart` : 'directly opposite each other';
   return [
@@ -8,6 +16,7 @@ export function script(n) {
     { t: 11.5, level: 'room', text: 'We have slowed time to a stop: choose the one photon that glows.', prompt: true },
     { t: 25, level: 'patient', text: `This ${fmt(n.photonE0)} photon crosses ${fmt(n.depth)} of tissue, then Compton-scatters near the target.` },
     { t: 44.5, level: 'patient', text: `It leaves with ${fmt(n.photonE1)} and hands ${fmt(n.electronE0)} to an electron.` },
+    ...(n.photonsPer2Gy ? [{ t: 51, level: 'patient', text: `The colours are the dose from ${sci(n.dosePhotons)} simulated photons of this beam. One 2 Gy treatment takes about ${sci(n.photonsPer2Gy)}.` }] : []),
     { t: 60, level: 'tissue', text: `That electron does the damage, travelling ${fmt(n.electronPath)} through tissue made of cells about ten micrometres across.` },
     { t: 76, level: 'tissue', text: `At this energy it is sparsely ionising: it loses only about ${fmt(n.letPrimary)}.` },
     { t: 94, level: 'cell', text: 'Inside a tumour cell nucleus, the fast electron passes straight through.' },

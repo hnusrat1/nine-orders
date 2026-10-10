@@ -100,6 +100,19 @@ def recompute(ix, S):
         D = f["edep_MeV"] * MEV_J / (f["soft_tissue_density_g_cm3"] * V_cm3 * 1e-3) / f["events"]     # Gy per photon
         phi = f["lenPrimaryE_mm"] / (V_cm3 * 1000) / f["events"] * 1e-6                                 # electrons per µm² per photon
         out["tracksPerNucleus2Gy"] = (phi / D * 2 * math.pi * (f["nucleus_diameter_um"] / 2) ** 2, "(track length / volume) / (energy / mass) × 2 Gy × π r² from index.runs.fluence", None)
+    if "dose" in R:
+        r = R["dose"]
+        out["dosePhotons"] = (r["events"], "index.runs.dose.events", None)
+        cax, cm, ys, v = np.array(r["cax_Gy_per_photon"]), np.array(r["cax_material"]), np.array(r["y_mm"]), r["voxel_mm"]
+        skin = ys[np.nonzero(cm)[0].max()] + v / 2
+        k = int(np.argmax(np.where(cm > 0, cax, 0)))
+        a_, b_, c_ = cax[k - 1], cax[k], cax[k + 1]
+        out["dmaxDepth"] = ((skin - (ys[k] + 0.5 * v * (a_ - c_) / (a_ - 2 * b_ + c_))) / 10, "skin to the parabolic peak of index.runs.dose.cax_Gy_per_photon", None)
+        if "fluence" in R:  # independent: the 4 M-photon fluence run's dose in the same 1 cm sphere
+            out["photonsPer2Gy"] = (2.0 / D, "2 Gy / dose per photon from the separate fluence run (index.runs.fluence); 5% statistical tolerance", 0.05)
+        sl, ax = ix["slices"]["axial"], S["sliceAxial"]
+        col = int((0 - sl["min_mm"][0]) / (sl["size_mm"][0] / sl["width"])); row = int((0 - sl["min_mm"][1]) / (sl["size_mm"][1] / sl["height"]))
+        out["doseAtInteraction"] = (100 * ax["dose"][row * sl["width"] + col] / 255, "sliceAxial dose at the Compton point's pixel (8-bit, upsampled for display)", 0.02)
     cp = S["cellPrimary"]
     out["_cellPrimary_ions_per_um"] = (float((cp["type"] == 2).sum()) / max(path_length(cp["pos"][cp["track"] == 0]), 1e-9), "shown segment only (information)", None)
     return out
